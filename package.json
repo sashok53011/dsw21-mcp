@@ -12,7 +12,8 @@
 	},
 	"scripts": {
 		"start": "node src/index.js",
-		"test": "node test/format.test.js && node test/gtfs.test.js && node test/smoke.js",
+		"start:http": "node src/http.js",
+		"test": "node test/format.test.js && node test/gtfs.test.js && node test/smoke.js && node test/smoke-http.js",
 		"smoke": "node test/smoke.js",
 		"test:gtfsrt": "node test/gtfsrt-live.js"
 	},

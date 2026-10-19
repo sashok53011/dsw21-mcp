@@ -38,7 +38,7 @@ Jedes Tool akzeptiert den optionalen Parameter **`language`** (`"en"` oder `"de"
 
 # 1. Installation & Deployment
 
-Der Server ist eine gewöhnliche Node.js-Anwendung und spricht **MCP über stdio**: Ihr KI-Client startet ihn automatisch bei Bedarf — kein Dämon zum Am-Laufen-Halten, kein offener Port. Einmal pro Maschine installieren.
+Der Server ist eine gewöhnliche Node.js-Anwendung und spricht **MCP über stdio** — Ihr KI-Client startet ihn automatisch bei Bedarf, kein Dämon zum Am-Laufen-Halten. Für permanente Hosts gibt es einen **HTTP-Modus** (Streamable HTTP, Abschnitt 1.4) für remote Clients wie Handy-Apps. Einmal pro Maschine installieren.
 
 **Voraussetzungen (alle Plattformen):** Node.js ≥ 18 (getestet mit Node 24), Internetzugang, ~50 MB Festplattenplatz für `node_modules` plus den Cache des statischen GTFS-Index.
 
@@ -48,6 +48,7 @@ Der Server ist eine gewöhnliche Node.js-Anwendung und spricht **MCP über stdio
 - [1.1 Windows](#11-windows)
 - [1.2 Linux](#12-linux)
 - [1.3 Android (Termux)](#13-android-termux)
+- [1.4 HTTP-Modus (Streamable HTTP)](#14-http-modus-streamable-http)
 - [2. MCP-Client-Konfiguration](#2-mcp-client-konfiguration)
   - [2.1 Claude Desktop & Claude Code](#21-claude-desktop--claude-code)
   - [2.2 hermes-agent (NousResearch)](#22-hermes-agent-nousresearch)
@@ -55,6 +56,7 @@ Der Server ist eine gewöhnliche Node.js-Anwendung und spricht **MCP über stdio
   - [2.4 LM Studio](#24-lm-studio)
   - [2.5 Universelle Konfiguration (Cursor, Windsurf, Cline, …)](#25-universelle-konfiguration-cursor-windsurf-cline-)
   - [2.6 Schneller stdio-Selbsttest](#26-schneller-stdio-selbsttest)
+  - [2.7 OmniChat Android-App (HTTP)](#27-omnichat-android-app-http)
 - [3. Umgebungsvariablen](#3-umgebungsvariablen)
 - [4. Nutzungshilfe: alle Tools mit Beispielen](#4-nutzungshilfe-alle-tools-mit-beispielen)
 - [5. Typische Frage → Tool-Rezepte](#5-typische-frage--tool-rezepte)
@@ -169,10 +171,56 @@ node src/index.js    # MCP-stdio-Server; genutzt von Termux-kompatiblen Agenten
 
 **Android-Hinweise & Grenzen**
 
-* Die **Claude-/ChatGPT-Handy-Apps können lokale stdio-Server nicht starten** — mobile Cloud-Apps unterstützen nur *remote* (HTTP)-MCP-Server, und `dsw21-mcp` ist stdio-only. Auf dem Handy mit Agenten koppeln, die *in Termux* laufen (oder jeden Client, der lokal `node` starten kann).
-* Alternative für die Handynutzung: `dsw21-mcp` auf dem PC/Server laufen lassen (Abschnitte Windows/Linux) und von Desktop-Clients nutzen; die DSW21-Daten sind identisch.
+* Die **Claude-/ChatGPT-Handy-Apps können lokale stdio-Server nicht starten** — mobile Cloud-Apps unterstützen nur *remote* (HTTP)-MCP-Server, während der Standardeinstieg von `dsw21-mcp` stdio ist. Auf dem Handy mit Agenten koppeln, die *in Termux* laufen (oder jeden Client, der lokal `node` starten kann) — oder den HTTP-Modus (Abschnitt 1.4) auf einem Server betreiben und remote verbinden.
+* Empfohlen für die Handynutzung: `dsw21-mcp` im HTTP-Modus (Abschnitt 1.4) auf dem PC/Server betreiben (Abschnitte Windows/Linux) und aus jeder MCP-App per `https://` verbinden; die DSW21-Daten sind identisch.
 * Termux während langer Sitzungen wach halten: `termux-wake-lock`. Autostart beim Boot: das Add-on [Termux:Boot](https://github.com/termux/termux-boot).
 * Der erste GTFS-RT-Aufruf lädt den ~18 MB großen Index; in mobilen Netzwerken kann das einen Moment dauern.
+
+## 1.4 HTTP-Modus (Streamable HTTP)
+
+`src/http.js` bedient dieselben neun Tools über [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) für permanente Hosts — Heimserver, FreedomBox oder VPS hinter einem Reverse Proxy / Cloudflare-Tunnel. Mobile Apps (z. B. OmniChat Android) können nur *remote* MCP-Server erreichen; für die Nutzung vom Handy ist dieser Modus nötig.
+
+```bash
+npm run start:http          # lauscht auf 127.0.0.1:8003, Endpunkt /mcp (+ /health)
+```
+
+* `MCP_HTTP_PORT` — Port (Standard `8003`; `0` = vom OS vergeben).
+* `MCP_HTTP_HOST` — Bind-Adresse (Standard `127.0.0.1`; localhost lassen, wenn Reverse Proxy oder `cloudflared`-Tunnel auf demselben Host die öffentliche URL veröffentlicht).
+* Sitzungen sind spezifikationsgemäß stateful: `initialize` erzeugt eine `Mcp-Session-Id`, spätere Requests senden sie zurück, `DELETE` beendet sie; Sitzungen ohne Aktivität werden nach einer Stunde automatisch aufgeräumt (abgestürzte Clients verursachen keine Leaks).
+* `GET /health` antwortet mit `ok` fürs Monitoring; der MCP-Endpunkt ist `/mcp`.
+
+**systemd (Linux / FreedomBox / NAS):**
+
+```ini
+# /etc/systemd/system/dsw21-mcp.service
+[Unit]
+Description=dsw21-mcp (MCP over Streamable HTTP)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/dsw21-mcp
+ExecStart=/usr/bin/node src/http.js
+Environment=MCP_HTTP_PORT=8003
+Environment=DB_USER_AGENT=my-app (https://example.org; me@example.org)
+Environment=DB_LANG=de
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now dsw21-mcp
+curl http://127.0.0.1:8003/health    # → ok
+```
+
+**Öffentlicher Zugriff (Beispiel Cloudflare-Tunnel):** einen Hostnamen auf den lokalen Port veröffentlichen — keine offenen eingehenden Ports:
+
+| Hostname | Service |
+|---|---|
+| `dsw21-mcp.example.com` | `http://localhost:8003` |
+
+Der MCP-Endpunkt ist dann `https://dsw21-mcp.example.com/mcp`. Hinweise für Reverse Proxies: Header `Mcp-Session-Id` sowie Methoden `POST`/`DELETE` durchreichen, Antwort-Pufferung für `text/event-stream` deaktivieren (nginx: `proxy_buffering off; proxy_read_timeout 110s`), und die 100-Sekunden-Idle-Timeout-Grenze des kostenlosen Cloudflare-Proxys beachten — den GTFS-Index nach jedem (Neu)Start einmalig aufbauen, damit der erste echte Aufruf schnell bleibt.
 
 ---
 
@@ -364,6 +412,16 @@ Ohne Client beweisen, dass der Server MCP-Anfragen beantwortet, mit einer Pipe a
 
 Die Antwort enthält alle neun Tools — Beweis, dass die Integration bereit ist.
 
+## 2.7 OmniChat Android-App (HTTP)
+
+Die OmniChat Android-App spricht MCP über Streamable HTTP und kann dsw21-mcp vollständig remote steuern:
+
+1. Server im HTTP-Modus betreiben (Abschnitt 1.4) und veröffentlichen (Reverse Proxy / Cloudflare-Tunnel).
+2. In der App: **MCP-Tab → HTTP →** Name `dsw21-mcp`, URL `https://dsw21-mcp.example.com/mcp` → hinzufügen → **Connect**.
+3. Die App führt `initialize` + `tools/list` aus und synchronisiert alle neun Tools; Tools einzeln ein-/ausschalten und z. B. fragen: *„Fährt die Dortmunder Straßenbahn gerade mit Verspätung?"*.
+
+Das Handy braucht keine lokale Laufzeit — alles läuft auf dem Server. Der erste GTFS-RT-Aufruf baut den ~18 MB großen Index serverseitig (nach dem Deploy vorwärmen, siehe 1.4).
+
 ---
 
 # 3. Umgebungsvariablen
@@ -377,6 +435,8 @@ Die Antwort enthält alle neun Tools — Beweis, dass die Integration bereit ist
 | `DB_REQUESTS_PER_MINUTE` | `30` | Clientseitige Drosselung (DB dokumentiert ~60 Anfragen/Min. für `dbnav`). |
 | `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT-Stream für die DSW21-/Nahverkehrs-Tools. |
 | `GTFS_INDEX_DIR` | `./.gtfs-index` | Cache-Verzeichnis für den statischen GTFS-Index. |
+| `MCP_HTTP_PORT` | `8003` | Port des HTTP-Modus (`npm run start:http`; `0` = vom OS vergeben). |
+| `MCP_HTTP_HOST` | `127.0.0.1` | Bind-Adresse des HTTP-Modus. |
 
 Setzen pro Client: Claude Desktop / LM Studio / universell → `"env"`-Block in JSON; hermes-agent → `env:` in YAML; OpenCode → `"environment"`; oder im Shell-Export vor dem Start (`export DB_LANG=de`, PowerShell: `$env:DB_LANG="de"`).
 

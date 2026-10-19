@@ -48,6 +48,7 @@ MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), к
 - [1.1 Windows](#11-windows)
 - [1.2 Linux](#12-linux)
 - [1.3 Android (Termux)](#13-android-termux)
+- [1.4 HTTP-режим (Streamable HTTP)](#14-http-режим-streamable-http)
 - [2. Настройка MCP-клиентов](#2-настройка-mcp-клиентов)
   - [2.1 Claude Desktop и Claude Code](#21-claude-desktop-и-claude-code)
   - [2.2 hermes-agent (NousResearch)](#22-hermes-agent-nousresearch)
@@ -55,6 +56,7 @@ MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), к
   - [2.4 LM Studio](#24-lm-studio)
   - [2.5 Универсальная конфигурация (Cursor, Windsurf, Cline, …)](#25-универсальная-конфигурация-cursor-windsurf-cline-)
   - [2.6 Быстрый stdio-самотест](#26-быстрый-stdio-самотест)
+  - [2.7 OmniChat Android (HTTP)](#27-omnichat-android-http)
 - [3. Переменные окружения](#3-переменные-окружения)
 - [4. Примеры использования всех инструментов](#4-примеры-использования-всех-инструментов)
 - [5. Типичный вопрос → рецепты инструментов](#5-типичный-вопрос--рецепты-инструментов)
@@ -169,10 +171,56 @@ node src/index.js    # MCP stdio-сервер; используется Termux-�
 
 **Примечания и ограничения для Android**
 
-* **Мобильные приложения Claude / ChatGPT не могут запускать локальные stdio-серверы** — облачные мобильные приложения поддерживают только *удалённые* (HTTP) MCP-серверы, а `dsw21-mcp` работает только через stdio. На телефоне связывайте его с агентами, работающими *внутри Termux* (или любым клиентом, способным локально запускать `node`).
-* Альтернатива для телефона: запускать `dsw21-mcp` на ПК/сервере (разделы Windows/Linux) и использовать из десктопных клиентов; данные DSW21 те же.
+* **Мобильные приложения Claude / ChatGPT не могут запускать локальные stdio-серверы** — облачные мобильные приложения поддерживают только *удалённые* (HTTP) MCP-серверы, а стандартный вход `dsw21-mcp` — stdio. На телефоне связывайте его с агентами, работающими *внутри Termux* (или любым клиентом, способным локально запускать `node`), либо разверните HTTP-режим (раздел 1.4) на сервере и подключайтесь удалённо.
+* Рекомендуется для телефона: запускать `dsw21-mcp` в HTTP-режиме (раздел 1.4) на ПК/сервере (разделы Windows/Linux) и подключаться из любого MCP-приложения по `https://`; данные DSW21 те же.
 * Не давайте Termux засыпать при длинных сессиях: `termux-wake-lock`. Автозагрузка при старте — аддон [Termux:Boot](https://github.com/termux/termux-boot).
 * Первый вызов GTFS-RT скачивает индекс ~18 МБ; в мобильных сетях это может занять время.
+
+## 1.4 HTTP-режим (Streamable HTTP)
+
+`src/http.js` отдаёт те же девять инструментов по протоколу [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) для постоянно включённых хостов — домашнего сервера, FreedomBox или VPS за reverse proxy / Cloudflare-туннелем. Мобильные приложения (например, OmniChat Android) умеют работать только с *удалёнными* MCP-серверами, поэтому для доступа с телефона нужен именно этот режим.
+
+```bash
+npm run start:http          # слушает 127.0.0.1:8003, эндпоинт /mcp (+ /health)
+```
+
+* `MCP_HTTP_PORT` — порт (по умолчанию `8003`; `0` — назначает ОС).
+* `MCP_HTTP_HOST` — адрес привязки (по умолчанию `127.0.0.1`; оставляйте localhost, если публичный URL отдаёт reverse proxy или `cloudflared`-туннель на этом же хосте).
+* Сессии — stateful по спецификации: `initialize` создаёт `Mcp-Session-Id`, последующие запросы возвращают его в заголовке, `DELETE` завершает сессию; сессии без активности дольше часа вычищаются автоматически (упавшие клиенты не накапливаются).
+* `GET /health` отвечает `ok` для мониторинга; MCP-эндпоинт — `/mcp`.
+
+**systemd (Linux / FreedomBox / NAS):**
+
+```ini
+# /etc/systemd/system/dsw21-mcp.service
+[Unit]
+Description=dsw21-mcp (MCP over Streamable HTTP)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/dsw21-mcp
+ExecStart=/usr/bin/node src/http.js
+Environment=MCP_HTTP_PORT=8003
+Environment=DB_USER_AGENT=my-app (https://example.org; me@example.org)
+Environment=DB_LANG=de
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now dsw21-mcp
+curl http://127.0.0.1:8003/health    # → ok
+```
+
+**Публичный доступ (пример с Cloudflare-туннелем):** опубликуйте хостен на локальный порт — входящие порты не нужны:
+
+| Хостен | Сервис |
+|---|---|
+| `dsw21-mcp.example.com` | `http://localhost:8003` |
+
+MCP-эндпоинт получится `https://dsw21-mcp.example.com/mcp`. Замечания для reverse proxy: пропускайте заголовок `Mcp-Session-Id` и методы `POST`/`DELETE`, отключите буферизацию ответов для `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`), и помните про 100-секундный idle-таймаут бесплатного прокси Cloudflare — постройте GTFS-индекс один раз после каждого (пере)запуска, чтобы первый боевой вызов остался быстрым.
 
 ---
 
@@ -364,6 +412,16 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 
 В ответе — все девять инструментов: доказательство, что интеграция готова.
 
+## 2.7 OmniChat Android (HTTP)
+
+Приложение OmniChat Android работает с MCP через Streamable HTTP и может управлять dsw21-mcp полностью удалённо:
+
+1. Запустите сервер в HTTP-режиме (раздел 1.4) и опубликуйте его (reverse proxy / Cloudflare-туннель).
+2. В приложении: **вкладка MCP → HTTP →** имя `dsw21-mcp`, URL `https://dsw21-mcp.example.com/mcp` → добавить → **Connect**.
+3. Приложение выполнит `initialize` + `tools/list` и синхронизирует все девять инструментов; включайте/выключайте их индивидуально и спрашивайте, например: *«Опаздывает ли сейчас трамвай в Дортмунде?»*.
+
+Телефону не нужен локальный рантайм — всё работает на сервере. Первый вызов GTFS-RT строит индекс ~18 МБ на стороне сервера (прогрейте его после деплоя, см. 1.4).
+
 ---
 
 # 3. Переменные окружения
@@ -377,6 +435,8 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 | `DB_REQUESTS_PER_MINUTE` | `30` | Клиентский троттлинг (DB документирует ~60 запросов/мин для `dbnav`). |
 | `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT поток для DSW21/инструментов местного транспорта. |
 | `GTFS_INDEX_DIR` | `./.gtfs-index` | Каталог кэша статического GTFS-индекса. |
+| `MCP_HTTP_PORT` | `8003` | Порт HTTP-режима (`npm run start:http`; `0` — назначает ОС). |
+| `MCP_HTTP_HOST` | `127.0.0.1` | Адрес привязки HTTP-режима. |
 
 Как задать их в клиенте: Claude Desktop / LM Studio / универсальные → блок `"env"` в JSON; hermes-agent → `env:` в YAML; OpenCode → `"environment"`; либо экспортировать в шелле перед запуском (`export DB_LANG=de`, PowerShell: `$env:DB_LANG="de"`).
 

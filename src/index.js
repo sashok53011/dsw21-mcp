@@ -3,29 +3,13 @@
 // (Dortmunder Stadtwerke, Dortmund/VRR) via GTFS-RT, plus Deutsche Bahn
 // long-distance data via db-vendo-client.
 // Transport: stdio. Built directly on db-vendo-client (no HTTP proxy layer).
+// For Streamable HTTP (always-on hosts) see src/http.js.
 
-import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
-import {createDbClient} from './client.js';
-import {registerStationTools} from './tools/stations.js';
-import {registerBoardTools} from './tools/departures.js';
-import {registerTripTools} from './tools/trip.js';
-import {registerJourneyTools} from './tools/journeys.js';
-import {registerGtfsRtTools} from './tools/gtfs-rt.js';
+import {createMcpServer} from './server.js';
 
 const main = async () => {
-	const client = createDbClient();
-
-	const server = new McpServer({
-		name: 'dsw21-mcp',
-		version: '0.1.0',
-	});
-
-	registerStationTools(server, client);
-	registerBoardTools(server, client);
-	registerTripTools(server, client);
-	registerJourneyTools(server, client);
-	registerGtfsRtTools(server);
+	const {server, client} = createMcpServer();
 
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
