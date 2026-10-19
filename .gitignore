@@ -1,0 +1,4 @@
+node_modules/
+.gtfs-index/
+*.log
+.DS_Store

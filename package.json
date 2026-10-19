@@ -1,0 +1,27 @@
+{
+	"name": "dsw21-mcp",
+	"version": "0.1.0",
+	"description": "MCP server with realtime delay information for DSW21 (Dortmunder Stadtwerke, Dortmund/VRR) via GTFS-RT, plus Deutsche Bahn long-distance data via db-vendo-client.",
+	"type": "module",
+	"main": "src/index.js",
+	"bin": {
+		"dsw21-mcp": "src/index.js"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"start": "node src/index.js",
+		"test": "node test/format.test.js && node test/gtfs.test.js && node test/smoke.js",
+		"smoke": "node test/smoke.js",
+		"test:gtfsrt": "node test/gtfsrt-live.js"
+	},
+	"license": "ISC",
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.12.0",
+		"db-vendo-client": "^6.11.3",
+		"gtfs-realtime-bindings": "^2.2.0",
+		"p-throttle": "^7.0.0",
+		"zod": "^3.24.0"
+	}
+}
