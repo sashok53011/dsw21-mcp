@@ -209,9 +209,9 @@ curl http://127.0.0.1:8003/health    # → ok
 
 | Имя хоста | Сервис |
 |---|---|
-| `dsw21-mcp.example.com` | `http://localhost:8003` |
+| `dsw21-mcp.devhorizon.online` | `http://localhost:8003` |
 
-MCP-эндпоинт становится `https://dsw21-mcp.example.com/mcp`. Примечания для reverse proxy: пропускайте заголовок `Mcp-Session-Id` и методы `POST`/`DELETE`, отключайте буферизацию ответов для `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`) и учитывайте 100-секундный idle-таймаут бесплатного тира Cloudflare — прогрейте GTFS-индекс один раз после каждого (пере)запуска, чтобы первый реальный вызов остался быстрым.
+MCP-эндпоинт становится `https://dsw21-mcp.devhorizon.online/mcp`. Примечания для reverse proxy: пропускайте заголовок `Mcp-Session-Id` и методы `POST`/`DELETE`, отключайте буферизацию ответов для `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`) и учитывайте 100-секундный idle-таймаут бесплатного тира Cloudflare — прогрейте GTFS-индекс один раз после каждого (пере)запуска, чтобы первый реальный вызов остался быстрым.
 
 ---
 
@@ -402,7 +402,7 @@ node /home/user/dsw21-mcp/src/index.js
 Приложение OmniChat для Android работает с MCP по Streamable HTTP и может полностью удалённо управлять dsw21-mcp:
 
 1. Запустите сервер в HTTP-режиме (раздел 1.4) и опубликуйте за контролем доступа (reverse proxy с Basic Auth / Cloudflare Access — см. блок безопасности в 1.4).
-2. В приложении: **вкладка MCP → HTTP →** имя `dsw21-mcp`, URL `https://dsw21-mcp.example.com/mcp` → добавить → **Connect**.
+2. В приложении: **вкладка MCP → HTTP →** имя `dsw21-mcp`, URL `https://dsw21-mcp.devhorizon.online/mcp` → добавить → **Connect**.
 3. Приложение выполнит `initialize` + `tools/list` и синхронизирует все три инструмента; включайте/отключайте их по отдельности и спрашивайте, например: *«Трамвай в Дортмунде сейчас опаздывает?»*.
 
 Телефону не нужна локальная среда выполнения — всё работает на сервере. Первый вызов GTFS-RT строит индекс ~18 МБ на стороне сервера (прогрейте его после деплоя, см. 1.4).

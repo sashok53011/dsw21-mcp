@@ -209,9 +209,9 @@ Unter **Windows** in einer Konsole starten (`npm run start:http`) oder einen gep
 
 | Hostname | Dienst |
 |---|---|
-| `dsw21-mcp.example.com` | `http://localhost:8003` |
+| `dsw21-mcp.devhorizon.online` | `http://localhost:8003` |
 
-Der MCP-Endpunkt ist dann `https://dsw21-mcp.example.com/mcp`. Reverse-Proxy-Hinweise: Header `Mcp-Session--Id` sowie Methoden `POST`/`DELETE` durchreichen, Response-Pufferung für `text/event-stream` deaktivieren (nginx: `proxy_buffering off; proxy_read_timeout 110s`), und die 100-Sekunden-Idle-Timeout der Cloudflare-Gratisstufe beachten — den GTFS-Index nach jedem (Neu)Start einmal aufwärmen, damit der erste echte Aufruf schnell bleibt.
+Der MCP-Endpunkt ist dann `https://dsw21-mcp.devhorizon.online/mcp`. Reverse-Proxy-Hinweise: Header `Mcp-Session--Id` sowie Methoden `POST`/`DELETE` durchreichen, Response-Pufferung für `text/event-stream` deaktivieren (nginx: `proxy_buffering off; proxy_read_timeout 110s`), und die 100-Sekunden-Idle-Timeout der Cloudflare-Gratisstufe beachten — den GTFS-Index nach jedem (Neu)Start einmal aufwärmen, damit der erste echte Aufruf schnell bleibt.
 
 ---
 
@@ -402,7 +402,7 @@ Die Antwort enthält alle drei Tools — Beweis, dass die Integration bereit ist
 Die OmniChat-Android-App spricht MCP über Streamable HTTP und kann dsw21-mcp vollständig remote steuern:
 
 1. Server im HTTP-Modus (Abschnitt 1.4) starten und hinter Zugriffskontrolle veröffentlichen (Reverse Proxy mit Basic Auth / Cloudflare Access — siehe Sicherheitsbox in 1.4).
-2. In der App: **MCP-Tab → HTTP →** Name `dsw21-mcp`, URL `https://dsw21-mcp.example.com/mcp` → hinzufügen → **Connect**.
+2. In der App: **MCP-Tab → HTTP →** Name `dsw21-mcp`, URL `https://dsw21-mcp.devhorizon.online/mcp` → hinzufügen → **Connect**.
 3. Die App führt `initialize` + `tools/list` aus und synchronisiert alle drei Tools; Tools einzeln aktivieren/deaktivieren und z. B. fragen: *„Ist die Dortmunder Straßenbahn gerade verspätet?"*.
 
 Das Handy braucht keine lokale Laufzeit — alles läuft auf dem Server. Der erste GTFS-RT-Aufruf baut den ~18 MB großen Index serverseitig (nach dem Deploy aufwärmen, siehe 1.4).

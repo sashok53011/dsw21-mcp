@@ -209,9 +209,9 @@ On **Windows**, run it in a console (`npm run start:http`) or register a schedul
 
 | Hostname | Service |
 |---|---|
-| `dsw21-mcp.example.com` | `http://localhost:8003` |
+| `dsw21-mcp.devhorizon.online` | `http://localhost:8003` |
 
-The MCP endpoint then is `https://dsw21-mcp.example.com/mcp`. Reverse-proxy notes: pass the `Mcp-Session-Id` header and `POST`/`DELETE` methods through, disable response buffering for `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`), and mind Cloudflare's free-tier 100 s idle timeout — build the GTFS index once after every (re)start so the first real call stays fast.
+The MCP endpoint then is `https://dsw21-mcp.devhorizon.online/mcp`. Reverse-proxy notes: pass the `Mcp-Session-Id` header and `POST`/`DELETE` methods through, disable response buffering for `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`), and mind Cloudflare's free-tier 100 s idle timeout — build the GTFS index once after every (re)start so the first real call stays fast.
 
 ---
 
@@ -402,7 +402,7 @@ The response contains all three tools — proof the integration is ready.
 The OmniChat Android app speaks MCP over Streamable HTTP and can drive dsw21-mcp fully remotely:
 
 1. Run the server in HTTP mode (section 1.4) and publish it behind access control (reverse proxy with Basic Auth / Cloudflare Access — see the security box in 1.4).
-2. In the app: **MCP tab → HTTP →** name `dsw21-mcp`, URL `https://dsw21-mcp.example.com/mcp` → add → **Connect**.
+2. In the app: **MCP tab → HTTP →** name `dsw21-mcp`, URL `https://dsw21-mcp.devhorizon.online/mcp` → add → **Connect**.
 3. The app performs `initialize` + `tools/list` and syncs all three tools; enable/disable tools individually and ask e.g. *"Is the Dortmund tram delayed right now?"*.
 
 The phone needs no local runtime — everything runs on the server. The first GTFS-RT call builds the ~18 MB index server-side (pre-warm it after deploy, see 1.4).
