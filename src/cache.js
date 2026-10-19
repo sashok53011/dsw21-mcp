@@ -1,7 +1,7 @@
 // Tiny in-memory TTL cache.
-// Deutsche Bahn APIs are rate-limited and sometimes block clients, so every
-// upstream call goes through this cache. Keys are derived from the method and
-// its arguments.
+// The GTFS-RT stream updates every 10 s and static-schedule lookups are cheap
+// but repeated, so every upstream fetch goes through this cache. Keys are
+// derived from the method and its arguments.
 
 class TtlCache {
 	constructor() {

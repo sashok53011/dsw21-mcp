@@ -1,46 +1,30 @@
 # dsw21-mcp
 
-**Информация о задержках в реальном времени для DSW21 (Dortmunder Stadtwerke) в Дортмунде / VRR — и дальних рейсов Deutsche Bahn — как MCP-сервер.**
+**Информация о задержках в реальном времени для DSW21 (Dortmunder Stadtwerke) в Дортмунде / VRR — как MCP-сервер.**
 
 [English](readme.md) · [Deutsch](readme.de.md) · [Русский](readme.ru.md)
 
-MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), который любой MCP-совместимый ИИ-клиент (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) может вызывать, чтобы ответить на вопросы вроде *«Мой трамвай в Дортмунде опаздывает?»*, *«Какой ICE из Berlin Hbf задерживается?»* или *«Сегодня есть сбои на линиях DSW21?»*.
+MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), который любой MCP-совместимый ИИ-клиент (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) может вызывать, чтобы ответить на вопросы вроде *«Мой трамвай в Дортмунде опаздывает?»*, *«Насколько опаздывает U45?»* или *«Сегодня есть сбои на линиях DSW21?»*.
 
-## Два независимых источника данных
+Данные берутся из **бесплатного GTFS-RT потока [realtime.gtfs.de](https://gtfs.de/en/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), обновление каждые 10 с, с join к статическому расписанию gtfs.de для номеров линий и названий остановок. Покрываются трамваи/автобусы DSW21, U-Bahn и региональный транспорт Дортмунда и всего VRR.
 
-| | **GTFS-RT (DSW21 и местный транспорт)** | **Deutsche Bahn (дальнее сообщение)** |
-|---|---|---|
-| Инструменты | `dsw21_delays`, `gtfs_rt_delays`, `gtfs_rt_alerts` | `search_stations`, `nearby_stations`, `station_delays`, `station_arrivals`, `trip_delays`, `find_journeys` |
-| Источник | бесплатный GTFS-RT поток [realtime.gtfs.de](https://gtfs.de/en/realtime/) (DELFi/gtfs.de, CC BY-SA 4.0) | API DB «vendo»/«movas» через [`db-vendo-client`](https://github.com/public-transport/db-vendo-client) |
-| Покрытие | трамваи/автобусы **DSW21**, U-Bahn, региональные — Дортмунд и весь VRR | ICE/IC/EC, RE/RB, S-Bahn — вся Германия |
-| Нужен API-ключ | нет | нет (кроме опционального профиля `dbris`) |
-| Доступность | стабильно, обновление каждые 10 с | DB периодически блокирует IP (`HTTP 452`) — DB-инструменты деградируют мягко, GTFS-RT продолжает работать |
-
-Поскольку два бэкенда независимы, **запросы о задержках DSW21 работают, даже когда Deutsche Bahn блокирует сервер** — это рекомендуемый способ получить данные по Дортмунду.
-
-## Все инструменты
+## Инструменты
 
 | Инструмент | Что делает |
 |---|---|
 | `dsw21_delays` | Задержки DSW21 на остановках Дортмунда (удобная обёртка, по умолчанию *Dortmund Hbf*). |
 | `gtfs_rt_delays` | Задержки на **любой** остановке местного транспорта в GTFS-RT потоке (VRR и шире) по имени или числовому ID. |
 | `gtfs_rt_alerts` | Служебные сообщения / сбои, затрагивающие рейсы DSW21, с понятными текстами. |
-| `search_stations` | Найти станцию DB по имени → EVA-ID, координаты. |
-| `nearby_stations` | Станции DB рядом с координатой WGS84, по расстоянию. |
-| `station_delays` | Живое **табло отправлений** DB: задержки, отмены, перроны, примечания. |
-| `station_arrivals` | Живое **табло прибытий** DB, те же поля. |
-| `trip_delays` | Один поезд DB по **всему маршруту**: по каждой станции план/факт, задержка в минутах, смены перронов. |
-| `find_journeys` | Соединения DB A→B с **задержками по каждому сегменту**, отменами, перронами, примечаниями. |
 
-Каждый инструмент принимает необязательный параметр **`language`** (`"en"` или `"de"`), который переключает слова статуса (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) и сообщения об ошибках. Имена JSON-полей остаются стабильными независимо от языка.
+Каждый инструмент принимает необязательный параметр **`language`** (`"en"` или `"de"`), который переключает слова статуса (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) и сообщения об ошибках. Имена JSON-полей остаются стабильными независимо от языка. Язык по умолчанию задаётся один раз через `DB_LANG` (раздел 3).
 
 ---
 
 # 1. Установка и развёртывание
 
-Сервер — обычное Node.js-приложение, работающее по **MCP поверх stdio**: ваш ИИ-клиент запускает его автоматически при необходимости — не нужен демон и открытый порт. Установка выполняется один раз на машину.
+Сервер — обычное Node.js-приложение, работающее по **MCP поверх stdio**: ваш ИИ-клиент запускает его автоматически при необходимости — не нужен демон и открытый порт. Для постоянно работающих машин есть **HTTP-режим** (Streamable HTTP, раздел 1.4) для удалённых клиентов, например мобильных приложений. Установка выполняется один раз на машину.
 
-**Требования (все платформы):** Node.js ≥ 18 (проверено на Node 24), доступ в интернет, ~50 МБ диска для `node_modules` плюс кэш статического GTFS-индекса.
+**Требования (все платформы):** Node.js ≥ 18 (проверено на Node 24), доступ в интернет, ~30 МБ диска для `node_modules` плюс кэш статического GTFS-индекса.
 
 <details>
 <summary><b>Содержание</b></summary>
@@ -56,7 +40,7 @@ MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), к
   - [2.4 LM Studio](#24-lm-studio)
   - [2.5 Универсальная конфигурация (Cursor, Windsurf, Cline, …)](#25-универсальная-конфигурация-cursor-windsurf-cline-)
   - [2.6 Быстрый stdio-самотест](#26-быстрый-stdio-самотест)
-  - [2.7 OmniChat Android (HTTP)](#27-omnichat-android-http)
+  - [2.7 Приложение OmniChat для Android (HTTP)](#27-приложение-omnichat-для-android-http)
 - [3. Переменные окружения](#3-переменные-окружения)
 - [4. Примеры использования всех инструментов](#4-примеры-использования-всех-инструментов)
 - [5. Типичный вопрос → рецепты инструментов](#5-типичный-вопрос--рецепты-инструментов)
@@ -97,7 +81,7 @@ npm test              # офлайн-тесты + регистрация инс�
 npm run test:gtfsrt   # опционально: живая проверка данных DSW21 (скачивание индекса ~18 МБ)
 ```
 
-Ожидаемый вывод: `smoke test passed ✓` со всеми девятью инструментами.
+Ожидаемый вывод: `smoke test passed ✓` со всеми тремя инструментами.
 
 **Примечания для Windows**
 
@@ -138,7 +122,7 @@ npm run test:gtfsrt   # опционально: живая проверка да
 
 * stdio MCP-сервер **не работает как служба** — клиент запускает его на сессию и сам останавливает. Ничего добавлять в systemd не нужно.
 * Если вы ведёте конфигурации клиентов в dotfiles, используйте абсолютный путь: `/home/<user>/dsw21-mcp/src/index.js`.
-* Безголовая машина (VPS/домашний сервер): клонируйте, например, в `/opt/dsw21-mcp`, выполните `npm install --omit=dev` и укажите абсолютный путь в своём удалённо-совместимом MCP-клиенте.
+* Безголовая машина (VPS/домашний сервер): клонируйте, например, в `/opt/dsw21-mcp`, выполните `npm install --omit=dev` и используйте HTTP-режим (раздел 1.4), чтобы удалённые клиенты могли подключаться.
 
 ## 1.3 Android (Termux)
 
@@ -171,23 +155,29 @@ node src/index.js    # MCP stdio-сервер; используется Termux-�
 
 **Примечания и ограничения для Android**
 
-* **Мобильные приложения Claude / ChatGPT не могут запускать локальные stdio-серверы** — облачные мобильные приложения поддерживают только *удалённые* (HTTP) MCP-серверы, а стандартный вход `dsw21-mcp` — stdio. На телефоне связывайте его с агентами, работающими *внутри Termux* (или любым клиентом, способным локально запускать `node`), либо разверните HTTP-режим (раздел 1.4) на сервере и подключайтесь удалённо.
-* Рекомендуется для телефона: запускать `dsw21-mcp` в HTTP-режиме (раздел 1.4) на ПК/сервере (разделы Windows/Linux) и подключаться из любого MCP-приложения по `https://`; данные DSW21 те же.
+* **Мобильные приложения Claude / ChatGPT не могут запускать локальные stdio-серверы** — облачные мобильные приложения поддерживают только *удалённые* (HTTP) MCP-серверы, а стандартный вход dsw21-mcp — stdio. На телефоне либо связывайте с агентами, работающими *внутри Termux* (или любым клиентом, способным локально запускать `node`), либо разворачивайте HTTP-режим (раздел 1.4) на сервере и подключайтесь удалённо (например, через приложение OmniChat, раздел 2.7).
+* Рекомендуется для телефона: запускать dsw21-mcp в HTTP-режиме (раздел 1.4) на ПК/сервере (разделы Windows/Linux выше) и подключаться из любого MCP-приложения по `https://`; данные те же.
 * Не давайте Termux засыпать при длинных сессиях: `termux-wake-lock`. Автозагрузка при старте — аддон [Termux:Boot](https://github.com/termux/termux-boot).
 * Первый вызов GTFS-RT скачивает индекс ~18 МБ; в мобильных сетях это может занять время.
 
 ## 1.4 HTTP-режим (Streamable HTTP)
 
-`src/http.js` отдаёт те же девять инструментов по протоколу [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) для постоянно включённых хостов — домашнего сервера, FreedomBox или VPS за reverse proxy / Cloudflare-туннелем. Мобильные приложения (например, OmniChat Android) умеют работать только с *удалёнными* MCP-серверами, поэтому для доступа с телефона нужен именно этот режим.
+`src/http.js` отдаёт те же три инструмента по [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) для постоянно работающих машин — домашний сервер, FreedomBox или VPS за reverse proxy / Cloudflare-туннелем. Мобильные приложения (например, OmniChat для Android) умеют работать только с *удалёнными* MCP-серверами, поэтому это режим для телефона.
 
 ```bash
 npm run start:http          # слушает 127.0.0.1:8003, эндпоинт /mcp (+ /health)
 ```
 
 * `MCP_HTTP_PORT` — порт (по умолчанию `8003`; `0` — назначает ОС).
-* `MCP_HTTP_HOST` — адрес привязки (по умолчанию `127.0.0.1`; оставляйте localhost, если публичный URL отдаёт reverse proxy или `cloudflared`-туннель на этом же хосте).
-* Сессии — stateful по спецификации: `initialize` создаёт `Mcp-Session-Id`, последующие запросы возвращают его в заголовке, `DELETE` завершает сессию; сессии без активности дольше часа вычищаются автоматически (упавшие клиенты не накапливаются).
-* `GET /health` отвечает `ok` для мониторинга; MCP-эндпоинт — `/mcp`.
+* `MCP_HTTP_HOST` — адрес привязки (по умолчанию `127.0.0.1`; оставляйте localhost, если reverse proxy или туннель `cloudflared` на том же хосте публикует публичный URL).
+* Сессии stateful по спецификации: `initialize` создаёт `Mcp-Session-Id`, последующие запросы возвращают её обратно, `DELETE` завершает сессию; сессии, простоявшие больше часа, вычищаются автоматически (упавшие клиенты не текут в память).
+* `GET /health` отвечает `ok` для мониторинга; MCP-эндпоинт — `/mcp`. `GET /mcp` (standalone SSE) не поддерживается и отвечает `405` — это нормально, поддерживаемые клиенты используют `POST`.
+
+> **Безопасность — у эндпоинта `/mcp` нет встроенной аутентификации.**
+> Любой, кто достигает URL, может вызвать все инструменты и запустить исходящие запросы к gtfs.de. Поэтому:
+> * Держите `MCP_HTTP_HOST=127.0.0.1` и публикуйте URL через reverse proxy или туннель на том же хосте.
+> * Публикуйте только за **контролем доступа**: [Cloudflare Access](https://one.cloudflare.com/access/) перед туннелем, HTTP Basic Auth на прокси или VPN (WireGuard/Tailscale) вместо открытого интернета.
+> * Ни в коем случае не направляйте голый порт с `MCP_HTTP_HOST=0.0.0.0` в открытый интернет.
 
 **systemd (Linux / FreedomBox / NAS):**
 
@@ -201,7 +191,6 @@ After=network.target
 WorkingDirectory=/opt/dsw21-mcp
 ExecStart=/usr/bin/node src/http.js
 Environment=MCP_HTTP_PORT=8003
-Environment=DB_USER_AGENT=my-app (https://example.org; me@example.org)
 Environment=DB_LANG=de
 Restart=on-failure
 
@@ -214,13 +203,15 @@ sudo systemctl daemon-reload && sudo systemctl enable --now dsw21-mcp
 curl http://127.0.0.1:8003/health    # → ok
 ```
 
-**Публичный доступ (пример с Cloudflare-туннелем):** опубликуйте хостен на локальный порт — входящие порты не нужны:
+В **Windows** запускайте в консоли (`npm run start:http`) или зарегистрируйте запланированную задачу / службу [NSSM](https://nssm.cc) на `node.exe D:\mcp5\db\dsw21-mcp\src\http.js`.
 
-| Хостен | Сервис |
+**Публичный доступ (пример Cloudflare-туннеля):** опубликуйте имя хоста на локальный порт — без открытых входящих портов, в связке с Cloudflare Access для аутентификации (см. блок безопасности выше):
+
+| Имя хоста | Сервис |
 |---|---|
 | `dsw21-mcp.example.com` | `http://localhost:8003` |
 
-MCP-эндпоинт получится `https://dsw21-mcp.example.com/mcp`. Замечания для reverse proxy: пропускайте заголовок `Mcp-Session-Id` и методы `POST`/`DELETE`, отключите буферизацию ответов для `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`), и помните про 100-секундный idle-таймаут бесплатного прокси Cloudflare — постройте GTFS-индекс один раз после каждого (пере)запуска, чтобы первый боевой вызов остался быстрым.
+MCP-эндпоинт становится `https://dsw21-mcp.example.com/mcp`. Примечания для reverse proxy: пропускайте заголовок `Mcp-Session-Id` и методы `POST`/`DELETE`, отключайте буферизацию ответов для `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`) и учитывайте 100-секундный idle-таймаут бесплатного тира Cloudflare — прогрейте GTFS-индекс один раз после каждого (пере)запуска, чтобы первый реальный вызов остался быстрым.
 
 ---
 
@@ -247,7 +238,6 @@ MCP-эндпоинт получится `https://dsw21-mcp.example.com/mcp`. З�
       "command": "node",
       "args": ["D:/mcp5/db/dsw21-mcp/src/index.js"],
       "env": {
-        "DB_USER_AGENT": "my-app (https://example.org; me@example.org)",
         "DB_LANG": "en"
       }
     }
@@ -263,19 +253,19 @@ MCP-эндпоинт получится `https://dsw21-mcp.example.com/mcp`. З�
     "dsw21-mcp": {
       "command": "node",
       "args": ["/home/user/dsw21-mcp/src/index.js"],
-      "env": { "DB_USER_AGENT": "my-app (https://example.org; me@example.org)" }
+      "env": { "DB_LANG": "en" }
     }
   }
 }
 ```
 
-**Claude Code** (CLI) — сервер и окружение одной командой:
+**Claude Code** (CLI) — сервер одной командой:
 
 ```bash
-claude mcp add dsw21-mcp -e DB_USER_AGENT="my-app (me@example.org)" -- node /home/user/dsw21-mcp/src/index.js
+claude mcp add dsw21-mcp -e DB_LANG="en" -- node /home/user/dsw21-mcp/src/index.js
 ```
 
-(Windows: `claude mcp add dsw21-mcp -e DB_USER_AGENT="my-app (me@example.org)" -- node D:/mcp5/db/dsw21-mcp/src/index.js`; управление: `claude mcp list`, `claude mcp remove dsw21-mcp`.)
+(Windows: `claude mcp add dsw21-mcp -e DB_LANG="en" -- node D:/mcp5/db/dsw21-mcp/src/index.js`; управление: `claude mcp list`, `claude mcp remove dsw21-mcp`.)
 
 После настройки инструменты появятся под значком молотка/гаечного ключа (Desktop) или через `/mcp` (Code). Спросите, например: *«Трамвай в Дортмунде сейчас опаздывает?»*.
 
@@ -299,8 +289,7 @@ mcp_servers:
     args:
       - D:/mcp5/db/dsw21-mcp/src/index.js
     env:
-      DB_USER_AGENT: "my-app (https://example.org; me@example.org)"
-      DB_LANG: "en"
+      DB_LANG: "de"
     timeout: 300
 ```
 
@@ -313,8 +302,7 @@ mcp_servers:
     args:
       - /home/user/dsw21-mcp/src/index.js
     env:
-      DB_USER_AGENT: "my-app (https://example.org; me@example.org)"
-      DB_LANG: "en"
+      DB_LANG: "de"
     timeout: 300
 ```
 
@@ -323,7 +311,6 @@ mcp_servers:
 Полезные добавки:
 
 * **Горячая перезагрузка:** после правки YAML выполните `/reload-mcp` в сессии — перезапуск не нужен.
-* **Импорт из Claude Code:** `hermes import-agent claude-code` автоматически переносит существующий блок `mcpServers` (плюс скиллы/инструкции).
 * **Из терминала:** в hermes-agent есть скилл `mcporter`, например `mcporter call dsw21-mcp.dsw21_delays stop="Dortmund Hbf" --output json`.
 
 ## 2.3 OpenCode
@@ -338,7 +325,6 @@ mcp_servers:
       "type": "local",
       "command": ["node", "D:/mcp5/db/dsw21-mcp/src/index.js"],
       "environment": {
-        "DB_USER_AGENT": "my-app (https://example.org; me@example.org)",
         "DB_LANG": "en"
       },
       "enabled": true
@@ -369,8 +355,7 @@ LM Studio использует **`mcp.json`** в нотации Cursor:
       "command": "node",
       "args": ["/home/user/dsw21-mcp/src/index.js"],
       "env": {
-        "DB_USER_AGENT": "my-app (https://example.org; me@example.org)",
-        "DB_LANG": "en"
+        "DB_LANG": "de"
       }
     }
   }
@@ -394,10 +379,10 @@ LM Studio использует **`mcp.json`** в нотации Cursor:
 Универсальная однострочная проверка — любой stdio-клиент в итоге выполняет команду вроде этой, она должна работать в первую очередь:
 
 ```bash
-DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
+node /home/user/dsw21-mcp/src/index.js
 ```
 
-Вы должны увидеть на stderr `[dsw21-mcp] ready (DB profile: dbnav, lang: en)`. После этого процесс ждёт MCP-сообщения на stdin (это нормально — выход по `Ctrl+C`).
+Вы должны увидеть на stderr `[dsw21-mcp] ready (lang: en)`. После этого процесс ждёт MCP-сообщения на stdin (это нормально — выход по `Ctrl+C`).
 
 ## 2.6 Быстрый stdio-самотест
 
@@ -410,17 +395,17 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 2) | node src/index.js
 ```
 
-В ответе — все девять инструментов: доказательство, что интеграция готова.
+В ответе — все три инструмента: доказательство, что интеграция готова.
 
-## 2.7 OmniChat Android (HTTP)
+## 2.7 Приложение OmniChat для Android (HTTP)
 
-Приложение OmniChat Android работает с MCP через Streamable HTTP и может управлять dsw21-mcp полностью удалённо:
+Приложение OmniChat для Android работает с MCP по Streamable HTTP и может полностью удалённо управлять dsw21-mcp:
 
-1. Запустите сервер в HTTP-режиме (раздел 1.4) и опубликуйте его (reverse proxy / Cloudflare-туннель).
+1. Запустите сервер в HTTP-режиме (раздел 1.4) и опубликуйте за контролем доступа (reverse proxy с Basic Auth / Cloudflare Access — см. блок безопасности в 1.4).
 2. В приложении: **вкладка MCP → HTTP →** имя `dsw21-mcp`, URL `https://dsw21-mcp.example.com/mcp` → добавить → **Connect**.
-3. Приложение выполнит `initialize` + `tools/list` и синхронизирует все девять инструментов; включайте/выключайте их индивидуально и спрашивайте, например: *«Опаздывает ли сейчас трамвай в Дортмунде?»*.
+3. Приложение выполнит `initialize` + `tools/list` и синхронизирует все три инструмента; включайте/отключайте их по отдельности и спрашивайте, например: *«Трамвай в Дортмунде сейчас опаздывает?»*.
 
-Телефону не нужен локальный рантайм — всё работает на сервере. Первый вызов GTFS-RT строит индекс ~18 МБ на стороне сервера (прогрейте его после деплоя, см. 1.4).
+Телефону не нужна локальная среда выполнения — всё работает на сервере. Первый вызов GTFS-RT строит индекс ~18 МБ на стороне сервера (прогрейте его после деплоя, см. 1.4).
 
 ---
 
@@ -428,12 +413,9 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 
 | Переменная | По умолчанию | Значение |
 |---|---|---|
-| `DB_USER_AGENT` | *(не задана)* | **Рекомендуется.** Deutsche Bahn требует User-Agent, идентифицирующий/контактный, например `my-app (https://example.org; me@example.org)`. Заглушки отклоняются; без него сервер пишет предупреждение и использует значение по умолчанию. |
-| `DB_PROFILE` | `dbnav` | Профиль API DB: `dbnav` (самый стабильный), `db`, `dbweb`, `dbris` (нужен `DB_API_KEY`, табло до 12 ч). |
-| `DB_API_KEY` | *(не задана)* | Только для `DB_PROFILE=dbris` — ключ из [DB API Marketplace](https://developers.deutschebahn.com/). |
-| `DB_LANG` | `en` | Язык вывода по умолчанию (`en`/`de`), если в вызове нет `language`. |
-| `DB_REQUESTS_PER_MINUTE` | `30` | Клиентский троттлинг (DB документирует ~60 запросов/мин для `dbnav`). |
-| `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT поток для DSW21/инструментов местного транспорта. |
+| `DB_LANG` | `en` | Язык вывода по умолчанию (`en`/`de`), если в вызове нет `language`. (Имя сохранено ради обратной совместимости; к Deutsche Bahn отношения не имеет.) |
+| `DB_USER_AGENT` | *(не задана)* | Необязательный User-Agent для запросов к gtfs.de — вежливый способ идентифицировать своё развертывание. |
+| `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT поток, который используют все инструменты. |
 | `GTFS_INDEX_DIR` | `./.gtfs-index` | Каталог кэша статического GTFS-индекса. |
 | `MCP_HTTP_PORT` | `8003` | Порт HTTP-режима (`npm run start:http`; `0` — назначает ОС). |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Адрес привязки HTTP-режима. |
@@ -444,11 +426,11 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 
 # 4. Примеры использования всех инструментов
 
-Примеры показывают JSON-**аргументы** инструмента и **типичный ответ**. Ответы GTFS-RT ниже — реальные снимки от 2026-10-19; ответы DB иллюстративные (поля точные) — фактические значения зависят от времени суток и от того, блокирует ли DB ваш IP.
+Примеры показывают JSON-**аргументы** инструмента и **типичный ответ**. Ответы ниже — реальные снимки от 2026-10-19 — фактические значения зависят от времени суток.
 
 ### 4.1 `dsw21_delays` — задержки DSW21 на остановке Дортмунда
 
-Лучшая точка входа для Дортмунда. По умолчанию *Dortmund Hbf*; остановка разрешается во **все подплатформы** ( realtime-поток ссылается на идентификаторы платформ — см. `stopIdCount`).
+Лучшая точка входа для Дортмунда. По умолчанию *Dortmund Hbf*; остановка разрешается во **все подплатформы** (realtime-поток ссылается на идентификаторы платформ — см. `stopIdCount`).
 
 **Аргументы**
 
@@ -456,7 +438,7 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 |---|---|---|---|
 | `stop` | string | `"Dortmund Hbf"` | Имя остановки Дортмунда или числовой GTFS-ID. |
 | `minutes` | int 5–180 | `60` | Окно времени от текущего момента. |
-| `language` | `"en"`/`"de"` | `en` | Язык слов статуса. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Язык слов статуса. |
 
 **Вызов**
 
@@ -522,7 +504,7 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 | `minutes` | int 5–180 | `60` | Окно времени от текущего момента. |
 | `minDelay` | int 0–60 | `1` | Только записи с задержкой ≥ этой; `0` — показать всё. |
 | `limit` | int 1–200 | `50` | Максимум результатов. |
-| `language` | `"en"`/`"de"` | `en` | Язык слов статуса. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Язык слов статуса. |
 
 **Вызовы**
 
@@ -557,7 +539,7 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 | Арг | Тип | По умолчанию | Описание |
 |---|---|---|---|
 | `limit` | int 1–100 | `30` | Максимум сообщений. |
-| `language` | `"en"`/`"de"` | `en` | Язык подписей. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Язык подписей. |
 
 **Вызов**
 
@@ -585,234 +567,6 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 }
 ```
 
-### 4.4 `search_stations` — найти станцию DB
-
-**Аргументы**
-
-| Арг | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `query` | string **обязательный** | – | Имя станции, например `"Berlin Hbf"`. |
-| `results` | int 1–20 | `5` | Максимум результатов. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Вызов**
-
-```json
-{"name": "search_stations", "arguments": {"query": "Berlin Hbf", "results": 3}}
-```
-
-**Формат ответа**
-
-```json
-{
-  "query": "Berlin Hbf",
-  "count": 1,
-  "stations": [
-    { "id": "8011160", "name": "Berlin Hbf", "type": "station",
-      "latitude": 52.525589, "longitude": 13.369548 }
-  ]
-}
-```
-
-Возвращённую `id` используйте как `station`/`from`/`to` в DB-инструментах ниже (имена тоже работают — они разрешаются автоматически).
-
-### 4.5 `nearby_stations` — станции DB вокруг координаты
-
-**Аргументы**
-
-| Арг | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `latitude` | number **обязательный** | – | Широта WGS84. |
-| `longitude` | number **обязательный** | – | Долгота WGS84. |
-| `results` | int 1–20 | `8` | Максимум результатов (по расстоянию). |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Вызов** (центр Дортмунда)
-
-```json
-{"name": "nearby_stations", "arguments": {"latitude": 51.5136, "longitude": 7.4653, "results": 5}}
-```
-
-**Формат ответа**
-
-```json
-{
-  "latitude": 51.5136, "longitude": 7.4653,
-  "count": 2,
-  "stations": [
-    { "id": "8010000", "name": "Dortmund Hbf", "distance": 650, "latitude": 51.5169, "longitude": 7.4609 }
-  ]
-}
-```
-
-### 4.6 `station_delays` — живое табло отправлений DB
-
-**Аргументы**
-
-| Арг | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `station` | string **обязательный** | – | Имя станции DB или номер EVA (например, `8011160` = Berlin Hbf). |
-| `minutes` | int 10–120 | `30` | Окно от текущего момента (профили без API-ключа дают примерно следующий час). |
-| `direction` | string | – | Только отправления в направлении этой станции. |
-| `products` | string[] | все | Фильтр: `nationalExpress`, `national`, `regionalExpress`, `regional`, `suburban`, `bus`, `ferry`, `subway`, `tram`, `taxi`. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Вызовы**
-
-```json
-{"name": "station_delays", "arguments": {"station": "Berlin Hbf", "minutes": 60}}
-{"name": "station_delays", "arguments": {"station": "8011160", "products": ["nationalExpress", "national"], "language": "de"}}
-{"name": "station_delays", "arguments": {"station": "Hamburg Hbf", "direction": "Köln Hbf", "minutes": 20}}
-```
-
-**Формат ответа**
-
-```json
-{
-  "station": "Berlin Hbf",
-  "kind": "departures",
-  "count": 3,
-  "delayedCount": 1,
-  "cancelledCount": 1,
-  "items": [
-    {
-      "line": "ICE 947", "product": "nationalExpress", "direction": "München Hbf",
-      "tripId": "…|80|1052020",
-      "planned": "2026-10-19T12:00:00.000Z",
-      "expected": "2026-10-19T12:07:00.000Z",
-      "prognosed": "2026-10-19T12:07:00.000Z",
-      "delayMin": 7, "status": "delayed", "platform": "12",
-      "remarks": [ { "type": "warning", "text": "Stellwechsel" } ]
-    },
-    {
-      "line": "S 3", "product": "suburban", "direction": "Erkner",
-      "planned": "2026-10-19T12:05:00.000Z", "expected": "2026-10-19T12:05:00.000Z",
-      "delayMin": 0, "status": "on time", "platform": "4"
-    },
-    {
-      "line": "RE 1", "product": "regionalExpress", "direction": "Wittenberg",
-      "planned": "2026-10-19T12:10:00.000Z", "expected": null,
-      "delayMin": null, "status": "cancelled", "platform": null, "cancelled": true
-    }
-  ]
-}
-```
-
-### 4.7 `station_arrivals` — живое табло прибытий DB
-
-Тот же формат, что у `station_delays` (без `direction`):
-
-```json
-{"name": "station_arrivals", "arguments": {"station": "Frankfurt (M) Hbf", "minutes": 45, "language": "de"}}
-```
-
-### 4.8 `trip_delays` — один поезд DB, весь маршрут
-
-Возьмите `tripId` из `station_delays`/`station_arrivals`/`find_journeys` и проверьте поезд от конца до конца: план/факт по каждой станции, распространение задержки, смены перронов, отмены.
-
-**Аргументы**
-
-| Арг | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `tripId` | string **обязательный** | – | Trip-ID из табло или результата поиска соединений. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Вызов**
-
-```json
-{"name": "trip_delays", "arguments": {"tripId": "…|80|1052020", "language": "en"}}
-```
-
-**Формат ответа**
-
-```json
-{
-  "tripId": "…|80|1052020",
-  "line": "ICE 947", "product": "nationalExpress", "direction": null,
-  "origin": { "id": "8011160", "name": "Berlin Hbf" },
-  "destination": { "id": "8000261", "name": "München Hbf" },
-  "plannedDeparture": "2026-10-19T12:00:00.000Z",
-  "expectedDeparture": "2026-10-19T12:07:00.000Z",
-  "departureDelayMin": 7,
-  "plannedArrival": "2026-10-19T16:00:00.000Z",
-  "expectedArrival": "2026-10-19T16:25:00.000Z",
-  "arrivalDelayMin": 25,
-  "cancelled": false, "status": "delayed",
-  "stops": 12, "delayedStops": 3,
-  "stopovers": [
-    {
-      "stop": { "id": "8010000", "name": "Halle (Saale) Hbf" },
-      "plannedArrival": "2026-10-19T13:30:00.000Z", "expectedArrival": "2026-10-19T13:40:00.000Z",
-      "arrivalDelayMin": 10,
-      "plannedDeparture": "2026-10-19T13:33:00.000Z", "expectedDeparture": "2026-10-19T13:43:00.000Z",
-      "departureDelayMin": 10,
-      "platform": "7", "status": "delayed"
-    }
-  ],
-  "remarks": []
-}
-```
-
-`delayedStops` быстро отвечает на вопрос *«насколько далеко разнесётся задержка?»*.
-
-### 4.9 `find_journeys` — соединения DB с задержками
-
-**Аргументы**
-
-| Арг | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `from` | string **обязательный** | – | Начало: имя или EVA-ID. |
-| `to` | string **обязательный** | – | Конец: имя или EVA-ID. |
-| `via` | string | – | Необязательная промежуточная станция. |
-| `departure` | ISO 8601 | сейчас | Планируемое время отправления, например `"2026-10-19T17:00:00+02:00"`. |
-| `transfers` | int 0–6 | – | Максимум пересадок. |
-| `results` | int 1–8 | `3` | Число соединений. |
-| `products` | string[] | все | Те же ID продуктов, что в `station_delays`. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Вызовы**
-
-```json
-{"name": "find_journeys", "arguments": {"from": "Berlin Hbf", "to": "München Hbf", "results": 2}}
-{"name": "find_journeys", "arguments": {"from": "8011160", "to": "8000261", "departure": "2026-10-19T17:00:00+02:00", "transfers": 0}}
-{"name": "find_journeys", "arguments": {"from": "Köln Hbf", "to": "Dortmund Hbf", "products": ["nationalExpress", "regionalExpress"], "language": "de"}}
-```
-
-**Формат ответа**
-
-```json
-{
-  "from": "Berlin Hbf", "to": "München Hbf", "count": 1,
-  "journeys": [
-    {
-      "status": "delayed",
-      "maxDelayMin": 10,
-      "cancelled": false,
-      "legs": [
-        { "type": "walking", "from": { "id": "8011160", "name": "Berlin Hbf" },
-          "to": { "id": "8011160", "name": "Berlin Hbf" },
-          "plannedDeparture": "2026-10-19T12:00:00.000Z" },
-        {
-          "type": "public", "line": "ICE 947", "product": "nationalExpress",
-          "tripId": "…|80|1052020",
-          "from": { "id": "8011160", "name": "Berlin Hbf" },
-          "to":   { "id": "8000261", "name": "München Hbf" },
-          "plannedDeparture": "2026-10-19T12:05:00.000Z",
-          "expectedDeparture": "2026-10-19T12:15:00.000Z",
-          "departureDelayMin": 10, "departurePlatform": "12",
-          "plannedArrival": "2026-10-19T16:00:00.000Z",
-          "expectedArrival": "2026-10-19T16:00:00.000Z",
-          "arrivalDelayMin": 0, "arrivalPlatform": "22",
-          "cancelled": false, "status": "delayed",
-          "remarks": []
-        }
-      ],
-      "refreshToken": "…"
-    }
-  ]
-}
-```
-
 ---
 
 # 5. Типичный вопрос → рецепты инструментов
@@ -823,43 +577,40 @@ DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
 | *«Насколько опаздывает U45 от Reinoldikirche?»* | `dsw21_delays {"stop": "Dortmund Reinoldikirche", "minutes": 30}` |
 | *«Сегодня есть сбои на DSW21?»* | `gtfs_rt_alerts {"limit": 10}` |
 | *«Все опаздывающие отправления Dortmund Hbf в ближайшие 2 ч»* | `gtfs_rt_delays {"stop": "Dortmund Hbf", "minutes": 120, "minDelay": 1}` |
-| *«ICE из Берлина в Мюнхен идёт по расписанию?»* | `find_journeys {"from": "Berlin Hbf", "to": "München Hbf"}` → `trip_delays {tripId из сегмента}` |
-| *«Как опоздает мой поезд сюда?»* | `station_delays {"station": "Erfurt Hbf", "minutes": 60}` → `trip_delays {tripId}` |
-| *«Какие станции рядом со мной?»* | `nearby_stations {"latitude": …, "longitude": …}` |
+| *«Есть ли задержки на Dortmund Kreuzstraße?»* | `gtfs_rt_delays {"stop": "Dortmund Kreuzstraße", "minDelay": 1}` |
 
 # 6. Известные ограничения
 
-**GTFS-RT / DSW21**
 * **Нет смен перронов/путей** — формат GTFS-RT передаёт только задержки и отмены (`SKIPPED`/`NO_DATA`); перроны — это данные статического расписания.
 * **Нет направления (`headsign`)** для DSW21 — файл `trips.txt` gtfs.de для местного транспорта содержит только `route_id,service_id,trip_id`.
 * **Первый вызов строит статический индекс** (скачивание ~18 МБ через HTTP Range, несколько секунд, затем 24 ч кэша в `GTFS_INDEX_DIR`).
 * gtfs.de отмечает **автобусы в VRR-потоке как неполные**; надёжна трамвайно-железнодорожная часть (U- и трамвайные линии DSW21).
-
-**Deutsche Bahn**
-* DB **троттлит и периодически блокирует клиентов** (`HTTP 452 "OPS_BLOCKED"`, иногда `403`). Этот сервер агрессивно кэширует (табло 30 с, соединения 60 с, станции 6 ч), ограничивает частоту запросов и возвращает **понятную локализованную ошибку** вместо падения — но блокировки на стороне DB вне нашего контроля. Инструменты DSW21/GTFS-RT от этого не страдают.
-* Без API-ключа табло покрывают примерно **следующий час** (профиль `dbris` + `DB_API_KEY`: до 12 ч).
-* Юридически использование API DB формально требует разрешения Deutsche Bahn; задайте идентифицирующий `DB_USER_AGENT`.
+* **HTTP-режим без встроенной аутентификации** — см. блок безопасности в разделе 1.4; публикуйте только за контролем доступа.
+* HTTP-режим не отдаёт standalone SSE (`GET /mcp` отвечает `405`); поддерживаемые клиенты используют `POST` и не затронуты.
 
 # 7. Решение проблем
 
 | Симптом | Причина / решение |
 |---|---|
-| `Deutsche Bahn is currently blocking requests … HTTP 452` | DB блокирует ваш IP. Подождите, смените `DB_PROFILE`, запустите из другой сети — или используйте GTFS-RT инструменты (они независимы). |
-| `[dsw21-mcp] Warning: DB_USER_AGENT is not set …` | Задайте `DB_USER_AGENT` с идентификацией, например `my-app (me@example.org)`. |
 | `Building the static GTFS index for the first time …` | Нормально при самом первом вызове GTFS-RT; повторите через ~30 с. Дальнейшие вызовы используют 24-часовой кэш. |
 | `No stop found for "…" in the static GTFS index` | Используйте точное имя с gtfs.de (например, `"Dortmund Hbf"`) или числовой stop-id. |
 | `Could not build/load the static GTFS index …` | Нет доступа к `download.gtfs.de` или изменилась структура архива. Повторите; проверьте `npm run test:gtfsrt`. |
 | Клиент не показывает инструменты | Проверьте абсолютный путь в конфигурации, успешность `npm install` и полностью перезапустите клиент. |
 | LM Studio игнорирует сервер | Включите **Settings → Server → «Allow calling servers from mcp.json»**; проверьте Program → Integrations. |
 | Тесты падают после `git clone` | Сначала выполните `npm install`. |
-| Android: приложение-клиент не видит сервер | Мобильные облачные приложения (Claude/ChatGPT) поддерживают только *удалённый* MCP; запускайте агентов внутри Termux или размещайте сервер на ПК. |
+| HTTP: `Session not found or expired` (404) | Сессия клиента вычищена (простой > 1 ч) или сервер перезапустился. Переподключитесь — клиенты автоматически повторяют `initialize`. |
+| HTTP: соединение обрывается через ~60–100 с | Бесплатный тир Cloudflare рвёт idle-соединения на 100 с. Прогревайте GTFS-индекс после каждого перезапуска (один вызов инструмента) и/или включите keep-alive пинги в клиенте. |
+| HTTP: `405 Method Not Allowed` на `GET /mcp` | Нормально — standalone SSE не поддерживается; клиенты используют `POST`. |
+| HTTP: `connection refused` | Сервер не запущен или неверные `MCP_HTTP_HOST`/`MCP_HTTP_PORT`. Проверьте `curl http://127.0.0.1:8003/health` → `ok`. |
+| Android: приложение-клиент не видит сервер | Мобильные облачные приложения (Claude/ChatGPT) поддерживают только *удалённый* MCP; запускайте агентов внутри Termux или разворачивайте HTTP-режим на сервере (раздел 1.4). |
 
 # 8. Разработка
 
 ```bash
-npm test            # офлайн: форматтеры + GTFS unit-тесты + stdio smoke-тест
+npm test            # офлайн: GTFS unit-тесты + stdio- и HTTP-smoke-тесты
 npm run test:gtfsrt # онлайн: строит индекс, запрашивает реальные задержки DSW21 (сеть)
 npm start           # запуск MCP-сервера на stdio
+npm run start:http  # запуск MCP-сервера по Streamable HTTP
 ```
 
 Структура:
@@ -868,30 +619,25 @@ npm start           # запуск MCP-сервера на stdio
 dsw21-mcp/
 ├── src/
 │   ├── index.js          # точка входа: stdio-транспорт + регистрация инструментов
-│   ├── client.js         # обёртка db-vendo-client: профиль, троттлинг, кэш, ошибки
+│   ├── http.js           # точка входа: Streamable-HTTP-транспорт (/mcp, /health)
+│   ├── server.js         # общая фабрика McpServer для обеих точек входа
 │   ├── cache.js          # in-memory TTL-кэш
-│   ├── format.js         # компактный FPTF → удобный для LLM JSON
-│   ├── i18n.js           # строки en/de
+│   ├── i18n.js           # строки en/de + разрешение языка
 │   ├── gtfs/
 │   │   ├── zip.js        # чтение отдельных файлов из удалённого zip 236 МБ через HTTP Range
 │   │   ├── csv.js        # парсер GTFS CSV
 │   │   ├── index.js      # построение статического GTFS-индекса + дисковый кэш (~18 МБ)
 │   │   └── feed.js       # GTFS-RT поток: загрузка, декодирование, join
 │   └── tools/
-│       ├── gtfs-rt.js    # dsw21_delays, gtfs_rt_delays, gtfs_rt_alerts
-│       ├── stations.js   # search_stations, nearby_stations
-│       ├── departures.js # station_delays, station_arrivals
-│       ├── trip.js       # trip_delays
-│       └── journeys.js   # find_journeys
+│       └── gtfs-rt.js    # dsw21_delays, gtfs_rt_delays, gtfs_rt_alerts
 └── test/
-    ├── format.test.js    # офлайн-тесты форматтера
     ├── gtfs.test.js      # офлайн-тесты CSV и разрешения остановок
     ├── gtfsrt-live.js    # онлайн-тест пайплайна GTFS-RT
-    └── smoke.js          # stdio-тест регистрации инструментов MCP
+    ├── smoke.js          # stdio-тест регистрации инструментов MCP
+    └── smoke-http.js     # тест MCP Streamable HTTP (включая DELETE сессии)
 ```
 
 # 9. Источники данных и лицензия
 
 * GTFS-RT поток и статическое расписание: [gtfs.de](https://gtfs.de/en/realtime/) — CC BY-SA 4.0 / CC BY 4.0, предоставляется DELFI e.V. и региональными объединениями; **без каких-либо гарантий**. Пожалуйста, соблюдайте [политику использования Transitous](https://transitous.org/api/) для альтернативных способов доступа.
-* Данные Deutsche Bahn через [db-vendo-client](https://github.com/public-transport/db-vendo-client) (лицензия ISC) — неофициально, оговорки в его readme.
 * Этот сервер: лицензия ISC. Репозиторий: https://github.com/sashok53011/dsw21-mcp

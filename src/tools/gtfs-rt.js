@@ -2,11 +2,10 @@
 //
 // These read the free gtfs.de realtime stream (TripUpdates + ServiceAlerts) and
 // join it with a static-GTFS index to resolve numeric stop/trip ids to names
-// and lines. They work even when the Deutsche Bahn APIs are blocked, because
-// they use a completely different data source.
+// and lines.
 
 import {z} from 'zod';
-import {bilingual, t} from '../i18n.js';
+import {bilingual, t, resolveLanguage} from '../i18n.js';
 import {loadIndex, DEFAULT_ZIP_URL} from '../gtfs/index.js';
 import {queryDelays, queryAlerts, DEFAULT_FEED_URL} from '../gtfs/feed.js';
 
@@ -83,7 +82,7 @@ const gtfsDelays = (server) => {
 			language: languageField,
 		},
 		async ({stop, minutes, minDelay, limit, language}) => {
-			const lang = language || 'en';
+			const lang = resolveLanguage(language);
 			const tt = t(lang);
 			try {
 				const index = await loadIndex({});
@@ -145,7 +144,7 @@ const dsw21Delays = (server) => {
 		},
 		async ({stop, minutes, language}) => {
 			// Reuse gtfs_rt_delays' handler logic via the same underlying calls.
-			const lang = language || 'en';
+			const lang = resolveLanguage(language);
 			const tt = t(lang);
 			try {
 				const index = await loadIndex({});
@@ -203,7 +202,7 @@ const gtfsAlerts = (server) => {
 			language: languageField,
 		},
 		async ({limit, language}) => {
-			const lang = language || 'en';
+			const lang = resolveLanguage(language);
 			try {
 				const index = await loadIndex({});
 				// Restrict to DSW21 trips.

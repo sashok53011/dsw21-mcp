@@ -1,7 +1,7 @@
 // Smoke test for the HTTP entry (src/http.js): starts the server on an
 // ephemeral port, connects with the SDK's Streamable HTTP client, and checks
-// the same invariants as the stdio smoke test (nine tools, language param).
-// Fully offline — no DB or GTFS-RT calls.
+// the same invariants as the stdio smoke test (three tools, language param).
+// Fully offline — no GTFS-RT calls.
 
 import {spawn} from 'node:child_process';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
@@ -9,7 +9,7 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 
 const START_TIMEOUT_MS = 10_000;
 
-const EXPECTED = ['dsw21_delays', 'find_journeys', 'gtfs_rt_alerts', 'gtfs_rt_delays', 'nearby_stations', 'search_stations', 'station_arrivals', 'station_delays', 'trip_delays'];
+const EXPECTED = ['dsw21_delays', 'gtfs_rt_alerts', 'gtfs_rt_delays'];
 
 const main = async () => {
 	const child = spawn(process.execPath, ['src/http.js'], {

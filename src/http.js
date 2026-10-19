@@ -16,7 +16,6 @@
 import http from 'node:http';
 import {randomUUID} from 'node:crypto';
 import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {createDbClient} from './client.js';
 import {createMcpServer} from './server.js';
 
 const PORT = Number(process.env.MCP_HTTP_PORT ?? 8003);
@@ -24,15 +23,11 @@ const HOST = process.env.MCP_HTTP_HOST || '127.0.0.1';
 const IDLE_SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1h
 const IDLE_SWEEP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
-// One shared DB client: caches (boards 30 s, journeys 60 s, locations 6 h)
-// and the request throttle stay warm across sessions and reconnects.
-const dbClient = createDbClient();
-
 /** sessionId -> {server, transport, lastSeen} */
 const sessions = new Map();
 
 const createSession = async () => {
-	const {server} = createMcpServer(dbClient);
+	const {server} = createMcpServer();
 	let transport; // assigned below; callbacks only run on later requests
 	transport = new StreamableHTTPServerTransport({
 		sessionIdGenerator: () => randomUUID(),
@@ -158,6 +153,6 @@ httpServer.listen(PORT, HOST, () => {
 	const actualPort = httpServer.address().port;
 	console.error(
 		`[dsw21-mcp] http ready on http://${HOST}:${actualPort}/mcp ` +
-		`(DB profile: ${dbClient.profileName}, lang: ${dbClient.language})`
+		`(lang: ${process.env.DB_LANG || 'en'})`
 	);
 });

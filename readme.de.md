@@ -1,46 +1,30 @@
 # dsw21-mcp
 
-**Echtzeit-Verspätungsinformationen für DSW21 (Dortmunder Stadtwerke) in Dortmund / VRR — und Fernverkehr der Deutschen Bahn — als MCP-Server.**
+**Echtzeit-Verspätungsinformationen für DSW21 (Dortmunder Stadtwerke) in Dortmund / VRR — als MCP-Server.**
 
 [English](readme.md) · [Deutsch](readme.de.md) · [Русский](readme.ru.md)
 
-Ein MCP-Server ([Model Context Protocol](https://modelcontextprotocol.io)), den jedes MCP-fähige KI-Client (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) aufrufen kann, um Fragen wie *„Ist meine Straßenbahn nach Dortmund verspätet?"*, *„Welcher ICE ab Berlin Hbf hat Verspätung?"* oder *„Gibt es heute Störungen auf DSW21-Linien?"* zu beantworten.
+Ein MCP-Server ([Model Context Protocol](https://modelcontextprotocol.io)), den jedes MCP-fähige KI-Client (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) aufrufen kann, um Fragen wie *„Ist meine Straßenbahn nach Dortmund verspätet?"*, *„Wie spät ist die U45?"* oder *„Gibt es heute Störungen auf DSW21-Linien?"* zu beantworten.
 
-## Zwei unabhängige Datenquellen
+Die Daten stammen aus dem **kostenlosen GTFS-RT-Stream [realtime.gtfs.de](https://gtfs.de/de/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), aktualisiert alle 10 s, verknüpft mit dem statischen gtfs.de-Fahrplan für Liniennummern und Haltestellennamen. Abgedeckt werden DSW21-Straßenbahnen/Busse, U-Bahn und Regionalverkehr in Dortmund und dem gesamten VRR.
 
-| | **GTFS-RT (DSW21 & Nahverkehr)** | **Deutsche Bahn (Fernverkehr)** |
-|---|---|---|
-| Tools | `dsw21_delays`, `gtfs_rt_delays`, `gtfs_rt_alerts` | `search_stations`, `nearby_stations`, `station_delays`, `station_arrivals`, `trip_delays`, `find_journeys` |
-| Quelle | kostenloser GTFS-RT-Stream [realtime.gtfs.de](https://gtfs.de/de/realtime/) (DELFi/gtfs.de, CC BY-SA 4.0) | DB-APIs „vendo"/„movas" via [`db-vendo-client`](https://github.com/public-transport/db-vendo-client) |
-| Abdeckung | **DSW21** Straßenbahn/Bus, U-Bahn, Regional — Dortmund & gesamter VRR | ICE/IC/EC, RE/RB, S-Bahn — ganz Deutschland |
-| API-Key nötig | nein | nein (außer optionales `dbris`-Profil) |
-| Verfügbarkeit | stabil, Aktualisierung alle 10 s | DB blockiert IPs mitunter (`HTTP 452`) — DB-Tools degradeieren gnädig, GTFS-RT-Tools funktionieren weiter |
-
-Da die beiden Backends unabhängig sind, **bleiben DSW21-Abfragen funktionieren, selbst wenn Deutsche Bahn den Server blockiert** — das ist der empfohlene Weg für Dortmunder Daten.
-
-## Alle Tools im Überblick
+## Tools
 
 | Tool | Was es tut |
 |---|---|
 | `dsw21_delays` | Echtzeit-Verspätungen an DSW21-Haltestellen in Dortmund (Komfort-Wrapper, Standard *Dortmund Hbf*). |
 | `gtfs_rt_delays` | Echtzeit-Verspätungen an **jeder** Nahverkehrshaltestelle im GTFS-RT-Feed (VRR und darüber hinaus) per Name oder numerischer ID. |
 | `gtfs_rt_alerts` | Service-Meldungen / Störungen betreffend DSW21-Züge, mit Klartext. |
-| `search_stations` | DB-Station per Name finden → EVA-ID, Koordinaten. |
-| `nearby_stations` | DB-Stationen nahe einer WGS84-Koordinate, nach Entfernung sortiert. |
-| `station_delays` | Live-DB-**Abfahrtstafel**: Verspätungen, Ausfälle, Gleise, Hinweise. |
-| `station_arrivals` | Live-DB-**Ankunftstafel**, gleiche Felder. |
-| `trip_delays` | Ein DB-Zug auf der **ganzen Strecke**: pro Haltestelle Soll vs. Ist, Verspätung in Minuten, Gleisänderungen. |
-| `find_journeys` | DB-Verbindungen A→B mit **Verspätungen pro Abschnitt**, Ausfällen, Gleisen, Hinweisen. |
 
-Jedes Tool akzeptiert den optionalen Parameter **`language`** (`"en"` oder `"de"`), der Statuswörter (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) und Fehlermeldungen umschaltet. JSON-Feldnamen bleiben sprachunabhängig stabil.
+Jedes Tool akzeptiert den optionalen Parameter **`language`** (`"en"` oder `"de"`), der Statuswörter (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) und Fehlermeldungen umschaltet. JSON-Feldnamen bleiben sprachunabhängig stabil. Die Standardsprache kann einmalig über `DB_LANG` gesetzt werden (Abschnitt 3).
 
 ---
 
 # 1. Installation & Deployment
 
-Der Server ist eine gewöhnliche Node.js-Anwendung und spricht **MCP über stdio** — Ihr KI-Client startet ihn automatisch bei Bedarf, kein Dämon zum Am-Laufen-Halten. Für permanente Hosts gibt es einen **HTTP-Modus** (Streamable HTTP, Abschnitt 1.4) für remote Clients wie Handy-Apps. Einmal pro Maschine installieren.
+Der Server ist eine gewöhnliche Node.js-Anwendung und spricht **MCP über stdio**: Ihr KI-Client startet ihn automatisch bei Bedarf — kein Dämon zum Am-Laufen-Halten. Für immer-auf-Maschinen gibt es einen **HTTP-Modus** (Streamable HTTP, Abschnitt 1.4) für entfernte Clients wie Handy-Apps. Installation einmal pro Maschine.
 
-**Voraussetzungen (alle Plattformen):** Node.js ≥ 18 (getestet mit Node 24), Internetzugang, ~50 MB Festplattenplatz für `node_modules` plus den Cache des statischen GTFS-Index.
+**Voraussetzungen (alle Plattformen):** Node.js ≥ 18 (getestet mit Node 24), Internetzugang, ~30 MB Festplattenplatz für `node_modules` plus den Cache des statischen GTFS-Index.
 
 <details>
 <summary><b>Inhaltsverzeichnis</b></summary>
@@ -97,7 +81,7 @@ npm test              # Offline-Tests + Tool-Registrierung
 npm run test:gtfsrt   # optional: Live-DSW21-Datencheck (~18 MB Index-Download)
 ```
 
-Erwartet: `smoke test passed ✓` mit allen neun Tools.
+Erwartet: `smoke test passed ✓` mit allen drei Tools.
 
 **Windows-Hinweise**
 
@@ -138,7 +122,7 @@ npm run test:gtfsrt   # optional: Live-DSW21-Datencheck
 
 * Ein stdio-MCP-Server läuft **nicht als Dienst** — der Client startet ihn pro Sitzung und stoppt ihn automatisch. Nichts für systemd nötig.
 * Wenn Sie Client-Konfigurationen in Dotfiles verwalten, absoluten Server-Pfad verwenden: `/home/<user>/dsw21-mcp/src/index.js`.
-* Kopflose Maschine (VPS/Home-Server): nach z. B. `/opt/dsw21-mcp` klonen, `npm install --omit=dev` ausführen und den entfernungsfähigen MCP-Client auf den absoluten Pfad zeigen.
+* Kopflose Maschine (VPS/Home-Server): nach z. B. `/opt/dsw21-mcp` klonen, `npm install --omit=dev` ausführen und den HTTP-Modus (Abschnitt 1.4) nutzen, damit entfernte Clients verbinden können.
 
 ## 1.3 Android (Termux)
 
@@ -171,23 +155,29 @@ node src/index.js    # MCP-stdio-Server; genutzt von Termux-kompatiblen Agenten
 
 **Android-Hinweise & Grenzen**
 
-* Die **Claude-/ChatGPT-Handy-Apps können lokale stdio-Server nicht starten** — mobile Cloud-Apps unterstützen nur *remote* (HTTP)-MCP-Server, während der Standardeinstieg von `dsw21-mcp` stdio ist. Auf dem Handy mit Agenten koppeln, die *in Termux* laufen (oder jeden Client, der lokal `node` starten kann) — oder den HTTP-Modus (Abschnitt 1.4) auf einem Server betreiben und remote verbinden.
-* Empfohlen für die Handynutzung: `dsw21-mcp` im HTTP-Modus (Abschnitt 1.4) auf dem PC/Server betreiben (Abschnitte Windows/Linux) und aus jeder MCP-App per `https://` verbinden; die DSW21-Daten sind identisch.
+* Die **Claude-/ChatGPT-Handy-Apps können lokale stdio-Server nicht starten** — mobile Cloud-Apps unterstützen nur *remote* (HTTP)-MCP-Server, während der Standardeinstieg von `dsw21-mcp` stdio ist. Auf dem Handy entweder mit Agenten koppeln, die *in Termux* laufen (oder jedem Client, der lokal `node` starten kann), oder den HTTP-Modus (Abschnitt 1.4) auf einem Server deployen und remote verbinden (z. B. über die OmniChat-App, Abschnitt 2.7).
+* Empfohlen für die Handynutzung: `dsw21-mcp` im HTTP-Modus (Abschnitt 1.4) auf dem PC/Server laufen lassen (Windows/Linux-Abschnitte oben) und von jeder MCP-App über `https://` verbinden; die Daten sind identisch.
 * Termux während langer Sitzungen wach halten: `termux-wake-lock`. Autostart beim Boot: das Add-on [Termux:Boot](https://github.com/termux/termux-boot).
 * Der erste GTFS-RT-Aufruf lädt den ~18 MB großen Index; in mobilen Netzwerken kann das einen Moment dauern.
 
 ## 1.4 HTTP-Modus (Streamable HTTP)
 
-`src/http.js` bedient dieselben neun Tools über [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) für permanente Hosts — Heimserver, FreedomBox oder VPS hinter einem Reverse Proxy / Cloudflare-Tunnel. Mobile Apps (z. B. OmniChat Android) können nur *remote* MCP-Server erreichen; für die Nutzung vom Handy ist dieser Modus nötig.
+`src/http.js` serviert dieselben drei Tools über [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) für immer-auf-Maschinen — Home-Server, FreedomBox oder VPS hinter einem Reverse Proxy / Cloudflare-Tunnel. Handy-Apps (z. B. OmniChat für Android) erreichen nur *remote*-MCP-Server, daher ist das der Modus fürs Handy.
 
 ```bash
 npm run start:http          # lauscht auf 127.0.0.1:8003, Endpunkt /mcp (+ /health)
 ```
 
-* `MCP_HTTP_PORT` — Port (Standard `8003`; `0` = vom OS vergeben).
-* `MCP_HTTP_HOST` — Bind-Adresse (Standard `127.0.0.1`; localhost lassen, wenn Reverse Proxy oder `cloudflared`-Tunnel auf demselben Host die öffentliche URL veröffentlicht).
-* Sitzungen sind spezifikationsgemäß stateful: `initialize` erzeugt eine `Mcp-Session-Id`, spätere Requests senden sie zurück, `DELETE` beendet sie; Sitzungen ohne Aktivität werden nach einer Stunde automatisch aufgeräumt (abgestürzte Clients verursachen keine Leaks).
-* `GET /health` antwortet mit `ok` fürs Monitoring; der MCP-Endpunkt ist `/mcp`.
+* `MCP_HTTP_PORT` — Laufport (Standard `8003`; `0` = vom OS zugewiesen).
+* `MCP_HTTP_HOST` — Bind-Adresse (Standard `127.0.0.1`; localhost behalten, wenn ein Reverse Proxy oder `cloudflared`-Tunnel auf demselben Host die öffentliche URL publiziert).
+* Sitzungen sind gemäß Spezifikation stateful: `initialize` erzeugt eine `Mcp-Session-Id`, spätere Anfragen geben sie zurück, `DELETE` beendet sie; Sitzungen mit über einer Stunde Ruhezeit werden automatisch aufgeräumt (abgestürzte Clients lecken nicht).
+* `GET /health` antwortet `ok` fürs Monitoring; der MCP-Endpunkt ist `/mcp`. `GET /mcp` (standalone SSE) wird nicht unterstützt und antwortet `405` — das ist normal, unterstützte Clients nutzen `POST`.
+
+> **Sicherheit — der `/mcp`-Endpunkt hat keine eingebaute Authentifizierung.**
+> Jeder, der die URL erreichen kann, kann alle Tools aufrufen und Outbound-Anfragen an gtfs.de auslösen. Deshalb:
+> * `MCP_HTTP_HOST=127.0.0.1` behalten und einen Reverse Proxy oder Tunnel auf demselben Host die URL publizieren lassen.
+> * Nur hinter **Zugriffskontrolle** veröffentlichen: [Cloudflare Access](https://one.cloudflare.com/access/) vor dem Tunnel, HTTP Basic Auth am Proxy oder ein VPN (WireGuard/Tailscale) statt des öffentlichen Internets.
+> * Keinesfalls einen rohen Port mit `MCP_HTTP_HOST=0.0.0.0` ins offene Internet richten.
 
 **systemd (Linux / FreedomBox / NAS):**
 
@@ -201,7 +191,6 @@ After=network.target
 WorkingDirectory=/opt/dsw21-mcp
 ExecStart=/usr/bin/node src/http.js
 Environment=MCP_HTTP_PORT=8003
-Environment=DB_USER_AGENT=my-app (https://example.org; me@example.org)
 Environment=DB_LANG=de
 Restart=on-failure
 
@@ -214,13 +203,15 @@ sudo systemctl daemon-reload && sudo systemctl enable --now dsw21-mcp
 curl http://127.0.0.1:8003/health    # → ok
 ```
 
-**Öffentlicher Zugriff (Beispiel Cloudflare-Tunnel):** einen Hostnamen auf den lokalen Port veröffentlichen — keine offenen eingehenden Ports:
+Unter **Windows** in einer Konsole starten (`npm run start:http`) oder einen geplanten Task / [NSSM](https://nssm.cc)-Dienst auf `node.exe D:\mcp5\db\dsw21-mcp\src\http.js` zeigen.
 
-| Hostname | Service |
+**Öffentlicher Zugang (Beispiel Cloudflare-Tunnel):** einen Hostnamen am lokalen Port publizieren — keine offenen eingehenden Ports, kombiniert mit Cloudflare Access für Authentifizierung (siehe Sicherheitsbox oben):
+
+| Hostname | Dienst |
 |---|---|
 | `dsw21-mcp.example.com` | `http://localhost:8003` |
 
-Der MCP-Endpunkt ist dann `https://dsw21-mcp.example.com/mcp`. Hinweise für Reverse Proxies: Header `Mcp-Session-Id` sowie Methoden `POST`/`DELETE` durchreichen, Antwort-Pufferung für `text/event-stream` deaktivieren (nginx: `proxy_buffering off; proxy_read_timeout 110s`), und die 100-Sekunden-Idle-Timeout-Grenze des kostenlosen Cloudflare-Proxys beachten — den GTFS-Index nach jedem (Neu)Start einmalig aufbauen, damit der erste echte Aufruf schnell bleibt.
+Der MCP-Endpunkt ist dann `https://dsw21-mcp.example.com/mcp`. Reverse-Proxy-Hinweise: Header `Mcp-Session--Id` sowie Methoden `POST`/`DELETE` durchreichen, Response-Pufferung für `text/event-stream` deaktivieren (nginx: `proxy_buffering off; proxy_read_timeout 110s`), und die 100-Sekunden-Idle-Timeout der Cloudflare-Gratisstufe beachten — den GTFS-Index nach jedem (Neu)Start einmal aufwärmen, damit der erste echte Aufruf schnell bleibt.
 
 ---
 
@@ -247,7 +238,6 @@ Einfügen (falls nicht vorhanden anlegen) und **Claude Desktop vollständig neu 
       "command": "node",
       "args": ["D:/mcp5/db/dsw21-mcp/src/index.js"],
       "env": {
-        "DB_USER_AGENT": "my-app (https://example.org; me@example.org)",
         "DB_LANG": "de"
       }
     }
@@ -263,19 +253,19 @@ Linux/macOS-Variante:
     "dsw21-mcp": {
       "command": "node",
       "args": ["/home/user/dsw21-mcp/src/index.js"],
-      "env": { "DB_USER_AGENT": "my-app (https://example.org; me@example.org)" }
+      "env": { "DB_LANG": "de" }
     }
   }
 }
 ```
 
-**Claude Code** (CLI) — Server und Umgebung in einem Befehl:
+**Claude Code** (CLI) — Server in einem Befehl:
 
 ```bash
-claude mcp add dsw21-mcp -e DB_USER_AGENT="my-app (me@example.org)" -e DB_LANG="de" -- node /home/user/dsw21-mcp/src/index.js
+claude mcp add dsw21-mcp -e DB_LANG="de" -- node /home/user/dsw21-mcp/src/index.js
 ```
 
-(Windows: `claude mcp add dsw21-mcp -e DB_USER_AGENT="my-app (me@example.org)" -- node D:/mcp5/db/dsw21-mcp/src/index.js`; Verwaltung via `claude mcp list` / `claude mcp remove dsw21-mcp`.)
+(Windows: `claude mcp add dsw21-mcp -e DB_LANG="de" -- node D:/mcp5/db/dsw21-mcp/src/index.js`; Verwaltung via `claude mcp list` / `claude mcp remove dsw21-mcp`.)
 
 Danach erscheinen die Tools unter dem Hammer/Schraubenschlüssel-Symbol (Desktop) oder via `/mcp` (Code). Zum Beispiel fragen: *„Ist die Dortmunder Straßenbahn gerade verspätet?"*.
 
@@ -299,7 +289,6 @@ mcp_servers:
     args:
       - D:/mcp5/db/dsw21-mcp/src/index.js
     env:
-      DB_USER_AGENT: "my-app (https://example.org; me@example.org)"
       DB_LANG: "de"
     timeout: 300
 ```
@@ -313,7 +302,6 @@ mcp_servers:
     args:
       - /home/user/dsw21-mcp/src/index.js
     env:
-      DB_USER_AGENT: "my-app (https://example.org; me@example.org)"
       DB_LANG: "de"
     timeout: 300
 ```
@@ -323,7 +311,6 @@ mcp_servers:
 Nützliche Extras:
 
 * **Hot Reload:** nach dem Bearbeiten der YAML `/reload-mcp` in der Sitzung ausführen — kein Neustart nötig.
-* **Import aus Claude Code:** `hermes import-agent claude-code` migriert einen bestehenden `mcpServers`-Block (plus Skills/Anweisungen) automatisch.
 * **Aus dem Terminal:** hermes-agent bringt den `mcporter`-Skill mit, z. B. `mcporter call dsw21-mcp.dsw21_delays stop="Dortmund Hbf" --output json`.
 
 ## 2.3 OpenCode
@@ -338,7 +325,6 @@ Projektdatei `.opencode.json` (oder global `~/.config/opencode/opencode.json`):
       "type": "local",
       "command": ["node", "D:/mcp5/db/dsw21-mcp/src/index.js"],
       "environment": {
-        "DB_USER_AGENT": "my-app (https://example.org; me@example.org)",
         "DB_LANG": "de"
       },
       "enabled": true
@@ -369,7 +355,6 @@ Am einfachsten bearbeiten: in LM Studio **Program-Tab (`>_`-Symbol, rechte Seite
       "command": "node",
       "args": ["/home/user/dsw21-mcp/src/index.js"],
       "env": {
-        "DB_USER_AGENT": "my-app (https://example.org; me@example.org)",
         "DB_LANG": "de"
       }
     }
@@ -394,10 +379,10 @@ Die meisten MCP-Clients verwenden dieselbe **Claude-kompatible `mcpServers`-Form
 Universeller Einzeilen-Check — jeder stdio-Client führt am Ende einen Befehl wie diesen aus, er muss zuerst funktionieren:
 
 ```bash
-DB_USER_AGENT="my-app (me@example.org)" node /home/user/dsw21-mcp/src/index.js
+node /home/user/dsw21-mcp/src/index.js
 ```
 
-Sie sollten `[dsw21-mcp] ready (DB profile: dbnav, lang: de)` auf stderr sehen. Der Prozess wartet dann auf MCP-Nachrichten auf stdin (normal — `Ctrl+C` zum Beenden).
+Sie sollten `[dsw21-mcp] ready (lang: de)` auf stderr sehen. Der Prozess wartet dann auf MCP-Nachrichten auf stdin (normal — `Ctrl+C` zum Beenden).
 
 ## 2.6 Schneller stdio-Selbsttest
 
@@ -410,17 +395,17 @@ Ohne Client beweisen, dass der Server MCP-Anfragen beantwortet, mit einer Pipe a
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 2) | node src/index.js
 ```
 
-Die Antwort enthält alle neun Tools — Beweis, dass die Integration bereit ist.
+Die Antwort enthält alle drei Tools — Beweis, dass die Integration bereit ist.
 
 ## 2.7 OmniChat Android-App (HTTP)
 
-Die OmniChat Android-App spricht MCP über Streamable HTTP und kann dsw21-mcp vollständig remote steuern:
+Die OmniChat-Android-App spricht MCP über Streamable HTTP und kann dsw21-mcp vollständig remote steuern:
 
-1. Server im HTTP-Modus betreiben (Abschnitt 1.4) und veröffentlichen (Reverse Proxy / Cloudflare-Tunnel).
+1. Server im HTTP-Modus (Abschnitt 1.4) starten und hinter Zugriffskontrolle veröffentlichen (Reverse Proxy mit Basic Auth / Cloudflare Access — siehe Sicherheitsbox in 1.4).
 2. In der App: **MCP-Tab → HTTP →** Name `dsw21-mcp`, URL `https://dsw21-mcp.example.com/mcp` → hinzufügen → **Connect**.
-3. Die App führt `initialize` + `tools/list` aus und synchronisiert alle neun Tools; Tools einzeln ein-/ausschalten und z. B. fragen: *„Fährt die Dortmunder Straßenbahn gerade mit Verspätung?"*.
+3. Die App führt `initialize` + `tools/list` aus und synchronisiert alle drei Tools; Tools einzeln aktivieren/deaktivieren und z. B. fragen: *„Ist die Dortmunder Straßenbahn gerade verspätet?"*.
 
-Das Handy braucht keine lokale Laufzeit — alles läuft auf dem Server. Der erste GTFS-RT-Aufruf baut den ~18 MB großen Index serverseitig (nach dem Deploy vorwärmen, siehe 1.4).
+Das Handy braucht keine lokale Laufzeit — alles läuft auf dem Server. Der erste GTFS-RT-Aufruf baut den ~18 MB großen Index serverseitig (nach dem Deploy aufwärmen, siehe 1.4).
 
 ---
 
@@ -428,14 +413,11 @@ Das Handy braucht keine lokale Laufzeit — alles läuft auf dem Server. Der ers
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `DB_USER_AGENT` | *(unset)* | **Empfohlen.** Deutsche Bahn verlangt einen User-Agent, der Sie identifiziert/kontaktiert, z. B. `my-app (https://example.org; me@example.org)`. Platzhalter werden abgelehnt; ohne ihn protokolliert der Server eine Warnung und nutzt einen Fallback. |
-| `DB_PROFILE` | `dbnav` | DB-API-Profil: `dbnav` (am stabilsten), `db`, `dbweb`, `dbris` (braucht `DB_API_KEY`, Tafeln bis 12 h). |
-| `DB_API_KEY` | *(unset)* | Nur für `DB_PROFILE=dbris` — Schlüssel aus dem [DB API Marketplace](https://developers.deutschebahn.com/). |
-| `DB_LANG` | `en` | Standard-Ausgabesprache (`en`/`de`), wenn `language` fehlt. |
-| `DB_REQUESTS_PER_MINUTE` | `30` | Clientseitige Drosselung (DB dokumentiert ~60 Anfragen/Min. für `dbnav`). |
-| `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT-Stream für die DSW21-/Nahverkehrs-Tools. |
+| `DB_LANG` | `en` | Standard-Ausgabesprache (`en`/`de`), wenn `language` fehlt. (Name aus Kompatibilitätsgründen beibehalten; keine Deutsche-Bahn-Beteiligung.) |
+| `DB_USER_AGENT` | *(unset)* | Optionaler User-Agent für Anfragen an gtfs.de — eine höfliche Art, Ihre Installation zu identifizieren. |
+| `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT-Stream, den alle Tools nutzen. |
 | `GTFS_INDEX_DIR` | `./.gtfs-index` | Cache-Verzeichnis für den statischen GTFS-Index. |
-| `MCP_HTTP_PORT` | `8003` | Port des HTTP-Modus (`npm run start:http`; `0` = vom OS vergeben). |
+| `MCP_HTTP_PORT` | `8003` | Laufport des HTTP-Modus (`npm run start:http`; `0` = vom OS zugewiesen). |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Bind-Adresse des HTTP-Modus. |
 
 Setzen pro Client: Claude Desktop / LM Studio / universell → `"env"`-Block in JSON; hermes-agent → `env:` in YAML; OpenCode → `"environment"`; oder im Shell-Export vor dem Start (`export DB_LANG=de`, PowerShell: `$env:DB_LANG="de"`).
@@ -444,11 +426,11 @@ Setzen pro Client: Claude Desktop / LM Studio / universell → `"env"`-Block in 
 
 # 4. Nutzungshilfe: alle Tools mit Beispielen
 
-Beispiele zeigen die JSON-**Argumente** eines Tools und eine **repräsentative Antwort**. GTFS-RT-Antworten unten sind echte Aufnahmen vom 2026-10-19; DB-Antworten sind illustrativ (feldgenau) — tatsächliche Werte hängen von Tageszeit und IP-Blockierung durch DB ab.
+Beispiele zeigen die JSON-**Argumente** eines Tools und eine **repräsentative Antwort**. Die Antworten unten sind echte Aufnahmen vom 2026-10-19 — tatsächliche Werte hängen von der Tageszeit ab.
 
 ### 4.1 `dsw21_delays` — DSW21-Verspätungen an einer Dortmunder Haltestelle
 
-Bester Einstieg für Dortmund. Standard ist *Dortmund Hbf*; die Haltestelle wird auf **alle Gleise/Steige** aufgelöst (der Echtzeit-Feed referenziert Steig-IDs — siehe `stopIdCount`).
+Bester Einstieg für Dortmund. Standard ist *Dortmund Hbf*; die Haltestelle wird auf **alle Steige** aufgelöst (der Echtzeit-Feed referenziert Steig-IDs — siehe `stopIdCount`).
 
 **Argumente**
 
@@ -456,7 +438,7 @@ Bester Einstieg für Dortmund. Standard ist *Dortmund Hbf*; die Haltestelle wird
 |---|---|---|---|
 | `stop` | string | `"Dortmund Hbf"` | Dortmunder Haltestellenname oder numerische GTFS-ID. |
 | `minutes` | int 5–180 | `60` | Zeitfenster ab jetzt. |
-| `language` | `"en"`/`"de"` | `en` | Sprache der Statuswörter. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Sprache der Statuswörter. |
 
 **Aufruf**
 
@@ -522,7 +504,7 @@ Gleiche Daten, aber für **jede** Haltestelle im GTFS-RT-Feed (gesamter VRR und 
 | `minutes` | int 5–180 | `60` | Zeitfenster ab jetzt. |
 | `minDelay` | int 0–60 | `1` | Nur Einträge mit ≥ dieser Verspätung; `0` = alles anzeigen. |
 | `limit` | int 1–200 | `50` | Maximale Ergebnisse. |
-| `language` | `"en"`/`"de"` | `en` | Sprache der Statuswörter. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Sprache der Statuswörter. |
 
 **Aufrufe**
 
@@ -557,7 +539,7 @@ Textliche Service-Meldungen zu DSW21-Zügen; generische Attribution-Hinweise wer
 | Arg | Typ | Standard | Beschreibung |
 |---|---|---|---|
 | `limit` | int 1–100 | `30` | Maximale Anzahl Meldungen. |
-| `language` | `"en"`/`"de"` | `en` | Sprache der Labels. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Sprache der Labels. |
 
 **Aufruf**
 
@@ -585,234 +567,6 @@ Textliche Service-Meldungen zu DSW21-Zügen; generische Attribution-Hinweise wer
 }
 ```
 
-### 4.4 `search_stations` — DB-Station finden
-
-**Argumente**
-
-| Arg | Typ | Standard | Beschreibung |
-|---|---|---|---|
-| `query` | string **erforderlich** | – | Stationsname, z. B. `"Berlin Hbf"`. |
-| `results` | int 1–20 | `5` | Maximale Ergebnisse. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Aufruf**
-
-```json
-{"name": "search_stations", "arguments": {"query": "Berlin Hbf", "results": 3}}
-```
-
-**Antwortformat**
-
-```json
-{
-  "query": "Berlin Hbf",
-  "count": 1,
-  "stations": [
-    { "id": "8011160", "name": "Berlin Hbf", "type": "station",
-      "latitude": 52.525589, "longitude": 13.369548 }
-  ]
-}
-```
-
-Die zurückgegebene `id` als `station`/`from`/`to` in den DB-Tools unten verwenden (Namen funktionieren auch — sie werden automatisch aufgelöst).
-
-### 4.5 `nearby_stations` — DB-Stationen um eine Koordinate
-
-**Argumente**
-
-| Arg | Typ | Standard | Beschreibung |
-|---|---|---|---|
-| `latitude` | number **erforderlich** | – | WGS84-Breitengrad. |
-| `longitude` | number **erforderlich** | – | WGS84-Längengrad. |
-| `results` | int 1–20 | `8` | Maximale Ergebnisse (nach Entfernung sortiert). |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Aufruf** (Dortmunder Innenstadt)
-
-```json
-{"name": "nearby_stations", "arguments": {"latitude": 51.5136, "longitude": 7.4653, "results": 5}}
-```
-
-**Antwortformat**
-
-```json
-{
-  "latitude": 51.5136, "longitude": 7.4653,
-  "count": 2,
-  "stations": [
-    { "id": "8010000", "name": "Dortmund Hbf", "distance": 650, "latitude": 51.5169, "longitude": 7.4609 }
-  ]
-}
-```
-
-### 4.6 `station_delays` — Live-DB-Abfahrtstafel
-
-**Argumente**
-
-| Arg | Typ | Standard | Beschreibung |
-|---|---|---|---|
-| `station` | string **erforderlich** | – | DB-Name oder EVA-Nummer (z. B. `8011160` = Berlin Hbf). |
-| `minutes` | int 10–120 | `30` | Fenster ab jetzt (Profile ohne API-Key liefern roughly die nächste Stunde). |
-| `direction` | string | – | Nur Abfahrten in Richtung dieser Station. |
-| `products` | string[] | alle | Filter: `nationalExpress`, `national`, `regionalExpress`, `regional`, `suburban`, `bus`, `ferry`, `subway`, `tram`, `taxi`. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Aufrufe**
-
-```json
-{"name": "station_delays", "arguments": {"station": "Berlin Hbf", "minutes": 60}}
-{"name": "station_delays", "arguments": {"station": "8011160", "products": ["nationalExpress", "national"], "language": "de"}}
-{"name": "station_delays", "arguments": {"station": "Hamburg Hbf", "direction": "Köln Hbf", "minutes": 20}}
-```
-
-**Antwortformat**
-
-```json
-{
-  "station": "Berlin Hbf",
-  "kind": "departures",
-  "count": 3,
-  "delayedCount": 1,
-  "cancelledCount": 1,
-  "items": [
-    {
-      "line": "ICE 947", "product": "nationalExpress", "direction": "München Hbf",
-      "tripId": "…|80|1052020",
-      "planned": "2026-10-19T12:00:00.000Z",
-      "expected": "2026-10-19T12:07:00.000Z",
-      "prognosed": "2026-10-19T12:07:00.000Z",
-      "delayMin": 7, "status": "Verspätung", "platform": "12",
-      "remarks": [ { "type": "warning", "text": "Stellwechsel" } ]
-    },
-    {
-      "line": "S 3", "product": "suburban", "direction": "Erkner",
-      "planned": "2026-10-19T12:05:00.000Z", "expected": "2026-10-19T12:05:00.000Z",
-      "delayMin": 0, "status": "pünktlich", "platform": "4"
-    },
-    {
-      "line": "RE 1", "product": "regionalExpress", "direction": "Wittenberg",
-      "planned": "2026-10-19T12:10:00.000Z", "expected": null,
-      "delayMin": null, "status": "fällt aus", "platform": null, "cancelled": true
-    }
-  ]
-}
-```
-
-### 4.7 `station_arrivals` — Live-DB-Ankunftstafel
-
-Gleiches Format wie `station_delays` (ohne `direction`):
-
-```json
-{"name": "station_arrivals", "arguments": {"station": "Frankfurt (M) Hbf", "minutes": 45, "language": "de"}}
-```
-
-### 4.8 `trip_delays` — ein DB-Zug, ganze Strecke
-
-`tripId` aus `station_delays`/`station_arrivals`/`find_journeys` holen und den Zug dann End-zu-Ende prüfen: Soll-/Ist-Zeiten pro Haltestelle, Verspätungsausbreitung, Gleisänderungen, Ausfälle.
-
-**Argumente**
-
-| Arg | Typ | Standard | Beschreibung |
-|---|---|---|---|
-| `tripId` | string **erforderlich** | – | Trip-ID aus Tafel- oder Verbindungsergebnis. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Aufruf**
-
-```json
-{"name": "trip_delays", "arguments": {"tripId": "…|80|1052020", "language": "de"}}
-```
-
-**Antwortformat**
-
-```json
-{
-  "tripId": "…|80|1052020",
-  "line": "ICE 947", "product": "nationalExpress", "direction": null,
-  "origin": { "id": "8011160", "name": "Berlin Hbf" },
-  "destination": { "id": "8000261", "name": "München Hbf" },
-  "plannedDeparture": "2026-10-19T12:00:00.000Z",
-  "expectedDeparture": "2026-10-19T12:07:00.000Z",
-  "departureDelayMin": 7,
-  "plannedArrival": "2026-10-19T16:00:00.000Z",
-  "expectedArrival": "2026-10-19T16:25:00.000Z",
-  "arrivalDelayMin": 25,
-  "cancelled": false, "status": "Verspätung",
-  "stops": 12, "delayedStops": 3,
-  "stopovers": [
-    {
-      "stop": { "id": "8010000", "name": "Halle (Saale) Hbf" },
-      "plannedArrival": "2026-10-19T13:30:00.000Z", "expectedArrival": "2026-10-19T13:40:00.000Z",
-      "arrivalDelayMin": 10,
-      "plannedDeparture": "2026-10-19T13:33:00.000Z", "expectedDeparture": "2026-10-19T13:43:00.000Z",
-      "departureDelayMin": 10,
-      "platform": "7", "status": "Verspätung"
-    }
-  ],
-  "remarks": []
-}
-```
-
-`delayedStops` beantwortet schnell die Frage *„Wie weit breitet sich die Verspätung aus?"*.
-
-### 4.9 `find_journeys` — DB-Verbindungen mit Verspätungen
-
-**Argumente**
-
-| Arg | Typ | Standard | Beschreibung |
-|---|---|---|---|
-| `from` | string **erforderlich** | – | Start: Name oder EVA-ID. |
-| `to` | string **erforderlich** | – | Ziel: Name oder EVA-ID. |
-| `via` | string | – | Optionale Zwischenstation. |
-| `departure` | ISO 8601 | jetzt | Geplante Abfahrtszeit, z. B. `"2026-10-19T17:00:00+02:00"`. |
-| `transfers` | int 0–6 | – | Maximale Umstiege. |
-| `results` | int 1–8 | `3` | Anzahl der Verbindungen. |
-| `products` | string[] | alle | Gleiche Produkt-IDs wie `station_delays`. |
-| `language` | `"en"`/`"de"` | `en` | – |
-
-**Aufrufe**
-
-```json
-{"name": "find_journeys", "arguments": {"from": "Berlin Hbf", "to": "München Hbf", "results": 2}}
-{"name": "find_journeys", "arguments": {"from": "8011160", "to": "8000261", "departure": "2026-10-19T17:00:00+02:00", "transfers": 0}}
-{"name": "find_journeys", "arguments": {"from": "Köln Hbf", "to": "Dortmund Hbf", "products": ["nationalExpress", "regionalExpress"], "language": "de"}}
-```
-
-**Antwortformat**
-
-```json
-{
-  "from": "Berlin Hbf", "to": "München Hbf", "count": 1,
-  "journeys": [
-    {
-      "status": "Verspätung",
-      "maxDelayMin": 10,
-      "cancelled": false,
-      "legs": [
-        { "type": "walking", "from": { "id": "8011160", "name": "Berlin Hbf" },
-          "to": { "id": "8011160", "name": "Berlin Hbf" },
-          "plannedDeparture": "2026-10-19T12:00:00.000Z" },
-        {
-          "type": "public", "line": "ICE 947", "product": "nationalExpress",
-          "tripId": "…|80|1052020",
-          "from": { "id": "8011160", "name": "Berlin Hbf" },
-          "to":   { "id": "8000261", "name": "München Hbf" },
-          "plannedDeparture": "2026-10-19T12:05:00.000Z",
-          "expectedDeparture": "2026-10-19T12:15:00.000Z",
-          "departureDelayMin": 10, "departurePlatform": "12",
-          "plannedArrival": "2026-10-19T16:00:00.000Z",
-          "expectedArrival": "2026-10-19T16:00:00.000Z",
-          "arrivalDelayMin": 0, "arrivalPlatform": "22",
-          "cancelled": false, "status": "Verspätung",
-          "remarks": []
-        }
-      ],
-      "refreshToken": "…"
-    }
-  ]
-}
-```
-
 ---
 
 # 5. Typische Frage → Tool-Rezepte
@@ -823,43 +577,40 @@ Gleiches Format wie `station_delays` (ohne `direction`):
 | *„Wie spät ist die U45 ab Reinoldikirche?"* | `dsw21_delays {"stop": "Dortmund Reinoldikirche", "minutes": 30}` |
 | *„Gibt es heute Störungen auf DSW21?"* | `gtfs_rt_alerts {"limit": 10}` |
 | *„Alle verspäteten Abfahrten in Dortmund Hbf in den nächsten 2 h"* | `gtfs_rt_delays {"stop": "Dortmund Hbf", "minutes": 120, "minDelay": 1}` |
-| *„Fährt der ICE von Berlin nach München pünktlich?"* | `find_journeys {"from": "Berlin Hbf", "to": "München Hbf"}` → `trip_delays {tripId aus dem Abschnitt}` |
-| *„Wie spät kommt mein Zug hier an?"* | `station_delays {"station": "Erfurt Hbf", "minutes": 60}` → `trip_delays {tripId}` |
-| *„Welche Stationen sind in meiner Nähe?"* | `nearby_stations {"latitude": …, "longitude": …}` |
+| *„Hat Dortmund Kreuzstraße Verspätung?"* | `gtfs_rt_delays {"stop": "Dortmund Kreuzstraße", "minDelay": 1}` |
 
 # 6. Bekannte Einschränkungen
 
-**GTFS-RT / DSW21**
 * **Keine Gleis-/Steigänderungen** — das GTFS-RT-Format liefert nur Verspätungen und Ausfälle (`SKIPPED`/`NO_DATA`); Gleise sind Statikdaten.
 * **Keine Richtung (`headsign`)** für DSW21 — die gtfs.de-Datei `trips.txt` enthält nur `route_id,service_id,trip_id`.
 * **Erster Aufruf baut einen statischen Index** (~18 MB Download via HTTP Range, einige Sekunden, danach 24 h in `GTFS_INDEX_DIR` gecacht).
 * gtfs.de nennt **Busse im VRR-Feed unvollständig**; Tram/Schiene (DSW21-U- und Straßenbahnlinien) sind der zuverlässige Teil.
-
-**Deutsche Bahn**
-* DB **drosselt und blockiert Clients mitunter** (`HTTP 452 "OPS_BLOCKED"`, manchmal `403`). Dieser Server cacht aggressiv (Tafeln 30 s, Verbindungen 60 s, Standorte 6 h), drosselt Anfragen und liefert einen **klaren lokalisierten Fehler** statt abzustürzen — aber upstream-Blockierungen sind nicht kontrollierbar. Die DSW21-/GTFS-RT-Tools sind nicht betroffen.
-* Tafeln ohne API-Key decken grob die **nächste Stunde** ab (`dbris`-Profil + `DB_API_KEY`: bis 12 h).
-* Rechtlich erfordert die Nutzung der DB-APIs formal die Erlaubnis der Deutschen Bahn; setzen Sie einen identifizierenden `DB_USER_AGENT`.
+* **HTTP-Modus ohne eingebaute Auth** — siehe Sicherheitsbox in Abschnitt 1.4; immer hinter Zugriffskontrolle veröffentlichen.
+* Der HTTP-Modus serviert kein standalone SSE (`GET /mcp` antwortet `405`); unterstützte Clients nutzen `POST` und sind nicht betroffen.
 
 # 7. Problemlösung
 
 | Symptom | Ursache / Lösung |
 |---|---|
-| `Deutsche Bahn is currently blocking requests … HTTP 452` | DB blockiert Ihre IP. Warten, `DB_PROFILE` wechseln, aus anderem Netz starten — oder die GTFS-RT-Tools nutzen (unabhängig). |
-| `[dsw21-mcp] Warning: DB_USER_AGENT is not set …` | `DB_USER_AGENT` auf etwas Identifizierendes setzen, z. B. `my-app (me@example.org)`. |
 | `Building the static GTFS index for the first time …` | Normal beim allerersten GTFS-RT-Aufruf; in ~30 s erneut versuchen. Spätere Aufrufe nutzen den 24-h-Cache. |
 | `No stop found for "…" in the static GTFS index` | Den exakten gtfs.de-Namen nutzen (z. B. `"Dortmund Hbf"`) oder die numerische Stop-ID. |
 | `Could not build/load the static GTFS index …` | Kein Internetzugang zu `download.gtfs.de` oder das Archiv-Layout hat sich geändert. Erneut versuchen; `npm run test:gtfsrt` prüfen. |
 | Client zeigt keine Tools | Absoluten Pfad in der Konfiguration prüfen, `npm install` erfolgreich?, Client vollständig neu starten. |
 | LM Studio ignoriert den Server | **Einstellungen → Server → „Allow calling servers from mcp.json"** aktivieren; Program → Integrations prüfen. |
 | Tests schlagen nach `git clone` fehl | Zuerst `npm install` ausführen. |
-| Android: Client-App sieht den Server nicht | Mobile-Cloud-Apps (Claude/ChatGPT) unterstützen nur *remote* MCP; Agenten in Termux laufen lassen oder den Server auf einem PC hosten. |
+| HTTP: `Session not found or expired` (404) | Die Sitzung des Clients wurde aufgeräumt (Ruhe > 1 h) oder der Server startete neu. Neu verbinden — Clients führen `initialize` automatisch aus. |
+| HTTP: Verbindung bricht nach ~60–100 s ab | Cloudflare Gratisstufe trennt Idle-Verbindungen bei 100 s. Nach jedem Start den GTFS-Index aufwärmen (ein Tool-Aufruf) und/oder Keep-Alive-Pings im Client aktivieren. |
+| HTTP: `405 Method Not Allowed` bei `GET /mcp` | Normal — standalone SSE wird nicht unterstützt; Clients nutzen `POST`. |
+| HTTP: `connection refused` | Server läuft nicht oder falsches `MCP_HTTP_HOST`/`MCP_HTTP_PORT`. `curl http://127.0.0.1:8003/health` → `ok` prüfen. |
+| Android: Client-App sieht den Server nicht | Mobile-Cloud-Apps (Claude/ChatGPT) unterstützen nur *remote* MCP; Agenten in Termux laufen lassen oder den HTTP-Modus auf einem Server deployen (Abschnitt 1.4). |
 
 # 8. Entwicklung
 
 ```bash
-npm test            # offline: Formatter + GTFS-Unit-Tests + stdio-Smoke-Test
+npm test            # offline: GTFS-Unit-Tests + stdio- & HTTP-Smoke-Tests
 npm run test:gtfsrt # live: baut Index, fragt echte DSW21-Verspätungen ab (Netzwerk)
 npm start           # MCP-Server auf stdio starten
+npm run start:http  # MCP-Server über Streamable HTTP starten
 ```
 
 Struktur:
@@ -868,30 +619,25 @@ Struktur:
 dsw21-mcp/
 ├── src/
 │   ├── index.js          # Einstieg: stdio-Transport + Tool-Registrierung
-│   ├── client.js         # db-vendo-client-Wrapper: Profil, Drossel, Cache, Fehler
+│   ├── http.js           # Einstieg: Streamable-HTTP-Transport (/mcp, /health)
+│   ├── server.js         # gemeinsame McpServer-Fabrik für beide Einstiege
 │   ├── cache.js          # In-Memory-TTL-Cache
-│   ├── format.js         # kompaktes FPTF → LLM-freundliches JSON
-│   ├── i18n.js           # en/de-Strings
+│   ├── i18n.js           # en/de-Strings + Sprachauflösung
 │   ├── gtfs/
 │   │   ├── zip.js        # einzelne Dateien aus remote 236-MB-zip via HTTP Range lesen
 │   │   ├── csv.js        # GTFS-CSV-Parser
 │   │   ├── index.js      # statischer GTFS-Indexaufbau + Disk-Cache (~18 MB)
 │   │   └── feed.js       # GTFS-RT-Feed: laden, dekodieren, joinen
 │   └── tools/
-│       ├── gtfs-rt.js    # dsw21_delays, gtfs_rt_delays, gtfs_rt_alerts
-│       ├── stations.js   # search_stations, nearby_stations
-│       ├── departures.js # station_delays, station_arrivals
-│       ├── trip.js       # trip_delays
-│       └── journeys.js   # find_journeys
+│       └── gtfs-rt.js    # dsw21_delays, gtfs_rt_delays, gtfs_rt_alerts
 └── test/
-    ├── format.test.js    # Offline-Formatter-Tests
     ├── gtfs.test.js      # Offline-CSV- + Stop-Auflösungs-Tests
     ├── gtfsrt-live.js    # Live-GTFS-RT-Pipeline-Test
-    └── smoke.js          # MCP-stdio-Tool-Registrierungstest
+    ├── smoke.js          # MCP-stdio-Tool-Registrierungstest
+    └── smoke-http.js     # MCP-Streamable-HTTP-Test (inkl. Session-DELETE)
 ```
 
 # 9. Datenquellen & Lizenz
 
 * GTFS-RT-Stream & statischer Fahrplan: [gtfs.de](https://gtfs.de/de/realtime/) — CC BY-SA 4.0 / CC BY 4.0, bereitgestellt von DELFI e.V. und regionalen Verbünden; **ohne jegliche Garantie**. Bitte die [Transitous-Nutzungsrichtlinie](https://transitous.org/api/) für alternative Zugriffswege beachten.
-* Deutsche-Bahn-Daten via [db-vendo-client](https://github.com/public-transport/db-vendo-client) (ISC-Lizenz) — inoffiziell, Caveats im readme.
 * Dieser Server: ISC-Lizenz. Repository: https://github.com/sashok53011/dsw21-mcp

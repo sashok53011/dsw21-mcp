@@ -20,7 +20,7 @@ const cache = new TtlCache();
 const fetchFeed = async (url) => {
 	const res = await fetch(url, {
 		signal: AbortSignal.timeout(60_000),
-		headers: {'user-agent': process.env.DB_USER_AGENT || 'dsw21-mcp-gtfs-rt (set DB_USER_AGENT)'},
+		headers: {'user-agent': process.env.DB_USER_AGENT || 'dsw21-mcp-gtfs-rt (+https://github.com/sashok53011/dsw21-mcp)'},
 	});
 	if (!res.ok) throw new Error(`GTFS-RT feed HTTP ${res.status}`);
 	const buf = Buffer.from(await res.arrayBuffer());
