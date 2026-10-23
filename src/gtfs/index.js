@@ -16,11 +16,14 @@ import {forEachCsvRow} from './csv.js';
 const DEFAULT_ZIP_URL = 'https://download.gtfs.de/germany/nv_free/latest.zip';
 // Static schedules change every ~2 weeks; re-index daily at most.
 const INDEX_TTL_MS = 24 * 60 * 60 * 1000;
+// Bump when the cached index shape changes (v2: stop coordinates added) so
+// stale caches are rebuilt on next load instead of served without coords.
+const INDEX_VERSION = 'v2';
 
 const cacheDir = () => process.env.GTFS_INDEX_DIR || join(process.cwd(), '.gtfs-index');
 
 const cacheFile = (zipUrl, agencyPattern) => {
-	const h = createHash('sha256').update(zipUrl + '|' + agencyPattern).digest('hex').slice(0, 16);
+	const h = createHash('sha256').update(INDEX_VERSION + '|' + zipUrl + '|' + agencyPattern).digest('hex').slice(0, 16);
 	return join(cacheDir(), `index-${h}.json`);
 };
 
@@ -98,12 +101,12 @@ const buildIndex = async ({zipUrl = DEFAULT_ZIP_URL, agencyPattern = 'DSW21|Dort
 		});
 	});
 
-	// 4) stop_id -> {name, city?}. Keep every stop referenced by this agency's
-	// trips would need stop_times (skipped); instead index *all* stops so a
-	// caller can resolve any numeric stopId seen in the RT feed, and flag
-	// Dortmund ones by city name.
+	// 4) stop_id -> {name, parent, lat, lon}. Keep every stop referenced by this
+	// agency's trips would need stop_times (skipped); instead index *all* stops
+	// so a caller can resolve any numeric stopId seen in the RT feed, and so
+	// nearby_stops can compute distances (coordinates needed there).
 	const stopsText = await readZipEntryText(zipUrl, byName['stops.txt']);
-	const stops = new Map(); // stopId -> {name, parent, city}
+	const stops = new Map(); // stopId -> {name, parent, lat, lon}
 	// A station is modelled as a parent stop plus per-platform child stops; the
 	// realtime feed references platform ids. Index name -> all stopIds and
 	// parent -> childIds so a station name resolves to the whole id set.
@@ -114,11 +117,19 @@ const buildIndex = async ({zipUrl = DEFAULT_ZIP_URL, agencyPattern = 'DSW21|Dort
 		const iId = header.indexOf('stop_id');
 		const iName = header.indexOf('stop_name');
 		const iParent = header.indexOf('parent_station');
+		const iLat = header.indexOf('stop_lat');
+		const iLon = header.indexOf('stop_lon');
 		if (iId === -1 || iName === -1) return;
 		const id = (row[iId] || '').trim();
 		const name = (row[iName] || '').trim() || null;
 		const parent = (row[iParent] || '').trim() || null;
-		stops.set(id, {name, parent});
+		const lat = iLat !== -1 ? parseFloat(row[iLat]) : NaN;
+		const lon = iLon !== -1 ? parseFloat(row[iLon]) : NaN;
+		stops.set(id, {
+			name,
+			parent,
+			...(Number.isFinite(lat) && Number.isFinite(lon) ? {lat, lon} : {}),
+		});
 		if (name) {
 			const key = name.toLowerCase();
 			if (!idsByName.has(key)) idsByName.set(key, []);
@@ -144,23 +155,34 @@ const buildIndex = async ({zipUrl = DEFAULT_ZIP_URL, agencyPattern = 'DSW21|Dort
 	return index;
 };
 
+// Process-level memo: the on-disk cache is ~55 MB of JSON; parsing it on every
+// tool call took 14–17 s. Keep the deserialized Maps in memory once per
+// process (the HTTP server is long-lived, stdio has one process per session).
+let memo = null; // {key, index}
+
 const loadIndex = async (opts = {}) => {
 	const zipUrl = opts.zipUrl || DEFAULT_ZIP_URL;
 	const agencyPattern = opts.agencyPattern || 'DSW21|Dortmunder';
 	const file = cacheFile(zipUrl, agencyPattern);
+	const key = `${file}:${opts.force ? 'force' : ''}`;
+
+	if (!opts.force && memo && memo.key === key) {
+		return {...memo.index, cached: true};
+	}
 
 	if (!opts.force && existsSync(file)) {
 		try {
 			const raw = JSON.parse(await readFile(file, 'utf8'));
 			if (Date.now() - new Date(raw.builtAt).getTime() < INDEX_TTL_MS) {
-				return {
+				const index = {
 					...raw,
 					stops: new Map(Object.entries(raw.stops)),
 					trips: new Map(Object.entries(raw.trips)),
 					idsByName: new Map(Object.entries(raw.idsByName || {})),
 					childIds: new Map(Object.entries(raw.childIds || {})),
-					cached: true,
 				};
+				memo = {key, index};
+				return {...index, cached: true};
 			}
 		} catch {
 			// fall through to rebuild
@@ -176,6 +198,7 @@ const loadIndex = async (opts = {}) => {
 		idsByName: Object.fromEntries(fresh.idsByName),
 		childIds: Object.fromEntries(fresh.childIds),
 	}), 'utf8');
+	memo = {key, index: fresh};
 	return {...fresh, cached: false};
 };
 

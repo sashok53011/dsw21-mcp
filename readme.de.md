@@ -6,7 +6,7 @@
 
 Ein MCP-Server ([Model Context Protocol](https://modelcontextprotocol.io)), den jedes MCP-fähige KI-Client (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) aufrufen kann, um Fragen wie *„Ist meine Straßenbahn nach Dortmund verspätet?"*, *„Wie spät ist die U45?"* oder *„Gibt es heute Störungen auf DSW21-Linien?"* zu beantworten.
 
-Die Daten stammen aus dem **kostenlosen GTFS-RT-Stream [realtime.gtfs.de](https://gtfs.de/de/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), aktualisiert alle 10 s, verknüpft mit dem statischen gtfs.de-Fahrplan für Liniennummern und Haltestellennamen. Abgedeckt werden DSW21-Straßenbahnen/Busse, U-Bahn und Regionalverkehr in Dortmund und dem gesamten VRR.
+Die Daten stammen aus dem **kostenlosen GTFS-RT-Stream [realtime.gtfs.de](https://gtfs.de/de/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), aktualisiert alle 10 s, verknüpft mit dem statischen gtfs.de-Fahrplan für Liniennummern und Haltestellennamen. Abgedeckt werden DSW21-Straßenbahnen/Busse, U-Bahn und Regionalverkehr in Dortmund und dem gesamten VRR. Die Verbindungsplanung (`plan_journey`) nutzt die kostenlose **[Transitous](https://transitous.org)**-MOTIS-Instanz (deutschlandweite GTFS/GTFS-RT-Aggregation).
 
 ## Tools
 
@@ -15,6 +15,9 @@ Die Daten stammen aus dem **kostenlosen GTFS-RT-Stream [realtime.gtfs.de](https:
 | `dsw21_delays` | Echtzeit-Verspätungen an DSW21-Haltestellen in Dortmund (Komfort-Wrapper, Standard *Dortmund Hbf*). |
 | `gtfs_rt_delays` | Echtzeit-Verspätungen an **jeder** Nahverkehrshaltestelle im GTFS-RT-Feed (VRR und darüber hinaus) per Name oder numerischer ID. |
 | `gtfs_rt_alerts` | Service-Meldungen / Störungen betreffend DSW21-Züge, mit Klartext. |
+| `current_location` | Wo sich der Nutzer befindet: GPS über die `/locate`-Seite → Env-Variablen des Servers → IP-Geolokalisierung. Verwenden, statt den Nutzer nach dem Standort zu fragen. |
+| `nearby_stops` | Haltestellen nahe einer Position (Standard: aktuelle Position), nach Entfernung sortiert — liefert `stopId` an die Verspätungs-Tools weiter. |
+| `plan_journey` | Verbindungsplanung mit Echtzeit-Updates über [Transitous](https://transitous.org) (MOTIS): Start ist standardmäßig die aktuelle Position, Ziel per Name oder Koordinaten. |
 
 Jedes Tool akzeptiert den optionalen Parameter **`language`** (`"en"` oder `"de"`), der Statuswörter (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) und Fehlermeldungen umschaltet. JSON-Feldnamen bleiben sprachunabhängig stabil. Die Standardsprache kann einmalig über `DB_LANG` gesetzt werden (Abschnitt 3).
 
@@ -33,6 +36,7 @@ Der Server ist eine gewöhnliche Node.js-Anwendung und spricht **MCP über stdio
 - [1.2 Linux](#12-linux)
 - [1.3 Android (Termux)](#13-android-termux)
 - [1.4 HTTP-Modus (Streamable HTTP)](#14-http-modus-streamable-http)
+- [1.5 Standort-Teilen (/locate-Seite)](#15-standort-teilen-locate-seite)
 - [2. MCP-Client-Konfiguration](#2-mcp-client-konfiguration)
   - [2.1 Claude Desktop & Claude Code](#21-claude-desktop--claude-code)
   - [2.2 hermes-agent (NousResearch)](#22-hermes-agent-nousresearch)
@@ -81,7 +85,7 @@ npm test              # Offline-Tests + Tool-Registrierung
 npm run test:gtfsrt   # optional: Live-DSW21-Datencheck (~18 MB Index-Download)
 ```
 
-Erwartet: `smoke test passed ✓` mit allen drei Tools.
+Erwartet: `smoke test passed ✓` mit allen sechs Tools.
 
 **Windows-Hinweise**
 
@@ -162,7 +166,7 @@ node src/index.js    # MCP-stdio-Server; genutzt von Termux-kompatiblen Agenten
 
 ## 1.4 HTTP-Modus (Streamable HTTP)
 
-`src/http.js` serviert dieselben drei Tools über [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) für immer-auf-Maschinen — Home-Server, FreedomBox oder VPS hinter einem Reverse Proxy / Cloudflare-Tunnel. Handy-Apps (z. B. OmniChat für Android) erreichen nur *remote*-MCP-Server, daher ist das der Modus fürs Handy.
+`src/http.js` serviert dieselben sechs Tools über [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) für immer-auf-Maschinen — Home-Server, FreedomBox oder VPS hinter einem Reverse Proxy / Cloudflare-Tunnel. Handy-Apps (z. B. OmniChat für Android) erreichen nur *remote*-MCP-Server, daher ist das der Modus fürs Handy. Zusätzlich serviert es die **`/locate`-Seite** (Abschnitt 1.5) zum Teilen der GPS-Position.
 
 ```bash
 npm run start:http          # lauscht auf 127.0.0.1:8003, Endpunkt /mcp (+ /health)
@@ -212,6 +216,18 @@ Unter **Windows** in einer Konsole starten (`npm run start:http`) oder einen gep
 | `dsw21-mcp.devhorizon.online` | `http://localhost:8003` |
 
 Der MCP-Endpunkt ist dann `https://dsw21-mcp.devhorizon.online/mcp`. Reverse-Proxy-Hinweise: Header `Mcp-Session--Id` sowie Methoden `POST`/`DELETE` durchreichen, Response-Pufferung für `text/event-stream` deaktivieren (nginx: `proxy_buffering off; proxy_read_timeout 110s`), und die 100-Sekunden-Idle-Timeout der Cloudflare-Gratisstufe beachten — den GTFS-Index nach jedem (Neu)Start einmal aufwärmen, damit der erste echte Aufruf schnell bleibt.
+
+## 1.5 Standort-Teilen (`/locate`-Seite)
+
+Die Standort-Tools (`current_location`, `nearby_stops`, `plan_journey`) lösen die Position des Nutzers aus drei Quellen in dieser Reihenfolge auf:
+
+1. **GPS über die `/locate`-Seite** (nur HTTP-Modus). Einmal `https://<host>/locate` im Handy-Browser öffnen, Geolokalisierung erlauben — die Seite sendet die Position an den Server (`POST /locate`) und hält sie über `watchPosition` aktuell, solange der Tab offen bleibt. Koordinaten werden **auf dem eigenen Server** in `GTFS_INDEX_DIR/location.json` (Rechte 600) gespeichert und überstehen Restarts.
+2. **`LOCATION_LAT` / `LOCATION_LON`** (Env-Variablen) — statische Position für Maschinen ohne Browser.
+3. **IP-Geolokalisierung** — die Client-IP (aus dem `Cf-Connecting-Ip`-Header des Cloudflare-Tunnels bzw. `X-Forwarded-For`) wird alle 10 Minuten einmal über [ipwho.is](https://ipwho.is) nachgeschlagen (kostenlos, HTTPS, ohne Key). Genauigkeit nur auf Stadtebene. Im stdio-Modus wird die öffentliche IP des Servers verwendet.
+
+> **Privatsphäre & Zugriff**
+> * GPS-Koordinaten verlassen den eigenen Server nie; der einzige ausgehende Lookup ist die Client-IP an ipwho.is (nur ohne GPS-Fix, max. einmal pro IP pro 10 Minuten).
+> * Die `/locate`-Seite hat **keine Authentifizierung** (wie vereinbart): Wer die URL kennt, kann nichts *lesen*, aber die gespeicherte Position *überschreiben*. Bei geheimem Hostnamen und geschütztem Rest der Installation (Cloudflare Access usw.) ist das für den Privatgebrauch akzeptabel; die `/locate`-URL nicht veröffentlichen.
 
 ---
 
@@ -395,7 +411,7 @@ Ohne Client beweisen, dass der Server MCP-Anfragen beantwortet, mit einer Pipe a
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 2) | node src/index.js
 ```
 
-Die Antwort enthält alle drei Tools — Beweis, dass die Integration bereit ist.
+Die Antwort enthält alle sechs Tools — Beweis, dass die Integration bereit ist.
 
 ## 2.7 OmniChat Android-App (HTTP)
 
@@ -403,7 +419,7 @@ Die OmniChat-Android-App spricht MCP über Streamable HTTP und kann dsw21-mcp vo
 
 1. Server im HTTP-Modus (Abschnitt 1.4) starten und hinter Zugriffskontrolle veröffentlichen (Reverse Proxy mit Basic Auth / Cloudflare Access — siehe Sicherheitsbox in 1.4).
 2. In der App: **MCP-Tab → HTTP →** Name `dsw21-mcp`, URL `https://dsw21-mcp.devhorizon.online/mcp` → hinzufügen → **Connect**.
-3. Die App führt `initialize` + `tools/list` aus und synchronisiert alle drei Tools; Tools einzeln aktivieren/deaktivieren und z. B. fragen: *„Ist die Dortmunder Straßenbahn gerade verspätet?"*.
+3. Die App führt `initialize` + `tools/list` aus und synchronisiert alle sechs Tools; Tools einzeln aktivieren/deaktivieren und z. B. fragen: *„Ist die Dortmunder Straßenbahn gerade verspätet?“*.
 
 Das Handy braucht keine lokale Laufzeit — alles läuft auf dem Server. Der erste GTFS-RT-Aufruf baut den ~18 MB großen Index serverseitig (nach dem Deploy aufwärmen, siehe 1.4).
 
@@ -416,7 +432,10 @@ Das Handy braucht keine lokale Laufzeit — alles läuft auf dem Server. Der ers
 | `DB_LANG` | `en` | Standard-Ausgabesprache (`en`/`de`), wenn `language` fehlt. (Name aus Kompatibilitätsgründen beibehalten; keine Deutsche-Bahn-Beteiligung.) |
 | `DB_USER_AGENT` | *(unset)* | Optionaler User-Agent für Anfragen an gtfs.de — eine höfliche Art, Ihre Installation zu identifizieren. |
 | `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT-Stream, den alle Tools nutzen. |
-| `GTFS_INDEX_DIR` | `./.gtfs-index` | Cache-Verzeichnis für den statischen GTFS-Index. |
+| `GTFS_INDEX_DIR` | `./.gtfs-index` | Cache-Verzeichnis für den statischen GTFS-Index und die gespeicherte GPS-Position (`location.json`). |
+| `LOCATION_LAT` / `LOCATION_LON` | *(unset)* | Statische Ersatzkoordinaten für `current_location` / `nearby_stops` / `plan_journey`, wenn kein GPS-Fix geteilt wurde. |
+| `LOCATION_FILE` | `<GTFS_INDEX_DIR>/location.json` | Wohin die GPS-Position der `/locate`-Seite gespeichert wird (Rechte 600). |
+| `TRANSITOUS_URL` | `https://api.transitous.org/api/v1` | Basis-URL der MOTIS-Instanz für `plan_journey`. |
 | `MCP_HTTP_PORT` | `8003` | Laufport des HTTP-Modus (`npm run start:http`; `0` = vom OS zugewiesen). |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Bind-Adresse des HTTP-Modus. |
 
@@ -567,6 +586,128 @@ Textliche Service-Meldungen zu DSW21-Zügen; generische Attribution-Hinweise wer
 }
 ```
 
+### 4.4 `current_location` — wo bin ich?
+
+Löst die Position des Nutzers auf (GPS von `/locate` → Env-Variablen → IP-Geolokalisierung). Dies verwenden, statt den Nutzer nach dem Standort zu fragen.
+
+**Argumente**
+
+| Arg | Typ | Standard | Beschreibung |
+|---|---|---|---|
+| `language` | `"en"`/`"de"` | `DB_LANG` | Sprache der Labels. |
+
+**Aufruf**
+
+```json
+{"name": "current_location", "arguments": {}}
+```
+
+**Antwort (echt, IP-Fallback)**
+
+```json
+{
+  "latitude": 51.5149378,
+  "longitude": 7.4655409,
+  "source": "ip",
+  "accuracyMeters": null,
+  "ageMinutes": 0,
+  "city": "Dortmund",
+  "country": "Germany",
+  "note": "Location estimated from the IP address — city-level accuracy only."
+}
+```
+
+Mit einem GPS-Fix von der `/locate`-Seite hat die Antwort `"source": "gps"`, eine Genauigkeit in Metern und `ageMinutes`; Positionen älter als 6 h werden mit `"stale": true` markiert.
+
+### 4.5 `nearby_stops` — welche Haltestellen sind nah?
+
+Nächste Stationen aus dem statischen GTFS-Index, nach Entfernung sortiert, pro Station dedupliziert (Plattformen zusammengeführt). Die `stopId` an `dsw21_delays` / `gtfs_rt_delays` weitergeben.
+
+**Argumente**
+
+| Arg | Typ | Standard | Beschreibung |
+|---|---|---|---|
+| `latitude` / `longitude` | number | aktuelle Position | Position für die Suche. |
+| `radius` | int 50–5000 | `800` | Suchradius in Metern. |
+| `limit` | int 1–20 | `8` | Maximale Ergebnisse. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Sprache der Labels. |
+
+**Aufruf** (explizite Koordinaten)
+
+```json
+{"name": "nearby_stops", "arguments": {"latitude": 51.5169, "longitude": 7.4609, "radius": 600, "limit": 5}}
+```
+
+**Antwort (echt)**
+
+```json
+{
+  "around": { "latitude": 51.5169, "longitude": 7.4609, "source": "argument" },
+  "radiusMeters": 600,
+  "count": 5,
+  "stops": [
+    { "stopId": "577810", "name": "Dortmund Hbf", "distance": 13 },
+    { "stopId": "114687", "name": "Dortmund Kampstraße", "distance": 198 },
+    { "stopId": "405714", "name": "Dortmund Burgtor", "distance": 305 },
+    { "stopId": "477593", "name": "DO Steinwache/DO-Hbf Nord", "distance": 356 },
+    { "stopId": "355029", "name": "Dortmund Burgtor", "distance": 393 }
+  ]
+}
+```
+
+### 4.6 `plan_journey` — wie komme ich dahin?
+
+Verbindungsplanung über Transitous (MOTIS, deutschlandweite Abdeckung) mit Echtzeit-Updates. Der Start ist standardmäßig die aktuelle Position — der Nutzer muss nicht nach dem Standort gefragt werden. Das Ziel ist ein Ortsname (geokodiert) oder `"lat,lon"`.
+
+**Argumente**
+
+| Arg | Typ | Standard | Beschreibung |
+|---|---|---|---|
+| `to` | string **erforderlich** | – | Ziel: Ortsname oder `"lat,lon"`. |
+| `from` | string | aktuelle Position | Start: Ortsname oder `"lat,lon"`. |
+| `departure` | ISO 8601 | jetzt | Geplante Abfahrtszeit. |
+| `maxTransfers` | int 0–10 | – | Maximale Umstiege. |
+| `results` | int 1–5 | `3` | Anzahl der Itineraries. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Sprache der Statuswörter. |
+
+**Aufrufe**
+
+```json
+{"name": "plan_journey", "arguments": {"to": "Dortmund Flughafen", "from": "Dortmund Hbf", "results": 2}}
+{"name": "plan_journey", "arguments": {"to": "51.5231,7.4653", "results": 1}}
+{"name": "plan_journey", "arguments": {"to": "Köln Hbf", "departure": "2026-10-24T17:00:00+02:00", "maxTransfers": 2}}
+```
+
+**Antwort (echt, gekürzt)**
+
+```json
+{
+  "source": "Transitous (MOTIS)",
+  "from": { "name": "Dortmund Hbf", "latitude": 51.5169, "longitude": 7.4609 },
+  "to": { "name": "Dortmund Flughafen", "latitude": 51.5189, "longitude": 7.6123 },
+  "count": 2,
+  "itineraries": [
+    {
+      "departAt": "2026-10-23T12:03:00.000Z",
+      "arriveAt": "2026-10-23T13:05:00.000Z",
+      "durationMin": 62,
+      "transfers": 1,
+      "legs": [
+        { "mode": "WALK", "from": "START", "to": "Dortmund Kampstraße",
+          "depart": "2026-10-23T12:03:00.000Z", "arrive": "2026-10-23T12:09:00.000Z",
+          "distanceMeters": 450 },
+        { "mode": "SUBWAY", "line": "U43", "headsign": "Dortmund Westfalenhütte",
+          "from": "Dortmund Kampstraße", "to": "…",
+          "depart": "2026-10-23T12:14:00.000Z", "scheduledDepart": "2026-10-23T12:12:00.000Z",
+          "delayMin": 2, "status": "delayed", "track": "23", "scheduledTrack": "23" }
+      ]
+    }
+  ]
+}
+```
+
+Transit-Abschnitte enthalten `line`, `headsign`, `tripId`, `track`/`scheduledTrack`, `cancelled` und `delayMin` (Echtzeit vs. Fahrplan) — dieselben Statuswörter wie bei den Verspätungs-Tools.
+
 ---
 
 # 5. Typische Frage → Tool-Rezepte
@@ -578,6 +719,10 @@ Textliche Service-Meldungen zu DSW21-Zügen; generische Attribution-Hinweise wer
 | *„Gibt es heute Störungen auf DSW21?"* | `gtfs_rt_alerts {"limit": 10}` |
 | *„Alle verspäteten Abfahrten in Dortmund Hbf in den nächsten 2 h"* | `gtfs_rt_delays {"stop": "Dortmund Hbf", "minutes": 120, "minDelay": 1}` |
 | *„Hat Dortmund Kreuzstraße Verspätung?"* | `gtfs_rt_delays {"stop": "Dortmund Kreuzstraße", "minDelay": 1}` |
+| *„Wie komme ich zum Flughafen?"* | `plan_journey {"to": "Dortmund Flughafen"}` — Start = aktuelle Position |
+| *„Welche Haltestelle ist nah?"* | `nearby_stops {}` → `stopId` an `dsw21_delays` weitergeben |
+| *„Wo bin ich?"* | `current_location {}` |
+| *„Zug nach Köln fährt 17:00 — wie komme ich dahin?"* | `plan_journey {"to": "Köln Hbf", "departure": "…T17:00:00+02:00"}` |
 
 # 6. Bekannte Einschränkungen
 
@@ -587,6 +732,9 @@ Textliche Service-Meldungen zu DSW21-Zügen; generische Attribution-Hinweise wer
 * gtfs.de nennt **Busse im VRR-Feed unvollständig**; Tram/Schiene (DSW21-U- und Straßenbahnlinien) sind der zuverlässige Teil.
 * **HTTP-Modus ohne eingebaute Auth** — siehe Sicherheitsbox in Abschnitt 1.4; immer hinter Zugriffskontrolle veröffentlichen.
 * Der HTTP-Modus serviert kein standalone SSE (`GET /mcp` antwortet `405`); unterstützte Clients nutzen `POST` und sind nicht betroffen.
+* **IP-Geolokalisierung ist auf Stadtebene** und hängt von einem Drittanbieter ab (ipwho.is); GPS über `/locate` ist die präzise Quelle. Kein GPS → `plan_journey` startet evtl. vom Stadtzentrum.
+* Die **`/locate`-Seite ist unauthentifiziert** — wer die URL kennt, kann die gespeicherte Position überschreiben (Abschnitt 1.5). Sie gibt nichts preis, aber die URL privat halten.
+* **Verbindungen kommen von Transitous** (kostenloser Community-Dienst, deutschlandweite GTFS/GTFS-RT-Aggregation) — dessen [Nutzungsrichtlinie](https://transitous.org/api/) beachten; der Server cached Itineraries 10 Minuten. Die Abdeckung folgt den Feeds, daher können einzelne regionale Betreiber fehlen.
 
 # 7. Problemlösung
 
@@ -602,6 +750,11 @@ Textliche Service-Meldungen zu DSW21-Zügen; generische Attribution-Hinweise wer
 | HTTP: Verbindung bricht nach ~60–100 s ab | Cloudflare Gratisstufe trennt Idle-Verbindungen bei 100 s. Nach jedem Start den GTFS-Index aufwärmen (ein Tool-Aufruf) und/oder Keep-Alive-Pings im Client aktivieren. |
 | HTTP: `405 Method Not Allowed` bei `GET /mcp` | Normal — standalone SSE wird nicht unterstützt; Clients nutzen `POST`. |
 | HTTP: `connection refused` | Server läuft nicht oder falsches `MCP_HTTP_HOST`/`MCP_HTTP_PORT`. `curl http://127.0.0.1:8003/health` → `ok` prüfen. |
+| `current_location` liefert `"source": "ip"` oder Stadtreichweite | Noch kein GPS-Fix — `https://<host>/locate` im Handy-Browser öffnen und den Tab offen lassen, oder `LOCATION_LAT`/`LOCATION_LON` setzen. |
+| `current_location` sagt `"stale": true` | Die GPS-Position ist älter als 6 h — `/locate`-Seite erneut öffnen. |
+| `plan_journey`: `MOTIS … 403 Generic user-agent` | Transitous lehnt generische User-Agents ab — `DB_USER_AGENT` auf dem Server setzen (dieser Build sendet bereits einen Default; eigener UA ist höflicher). |
+| `plan_journey`: `Place "…" not found` | Der Geocoder hat den Namen nicht erkannt — präziseren Namen oder `"lat,lon"` verwenden. |
+| `nearby_stops` liefert 0 Haltestellen | Radius zu klein oder Position mitten im Nichts — `radius` erhöhen (max. 5000 m). |
 | Android: Client-App sieht den Server nicht | Mobile-Cloud-Apps (Claude/ChatGPT) unterstützen nur *remote* MCP; Agenten in Termux laufen lassen oder den HTTP-Modus auf einem Server deployen (Abschnitt 1.4). |
 
 # 8. Entwicklung
@@ -619,20 +772,25 @@ Struktur:
 dsw21-mcp/
 ├── src/
 │   ├── index.js          # Einstieg: stdio-Transport + Tool-Registrierung
-│   ├── http.js           # Einstieg: Streamable-HTTP-Transport (/mcp, /health)
+│   ├── http.js           # Einstieg: Streamable-HTTP-Transport (/mcp, /health, /locate)
 │   ├── server.js         # gemeinsame McpServer-Fabrik für beide Einstiege
 │   ├── cache.js          # In-Memory-TTL-Cache
 │   ├── i18n.js           # en/de-Strings + Sprachauflösung
+│   ├── location.js       # Nutzerstandort: /locate-Seite, GPS-Datei-Store, IP-Geolokalisierung
+│   ├── nearby.js         # Haversine-Entfernung + Nahstationssuche (reine Logik)
 │   ├── gtfs/
 │   │   ├── zip.js        # einzelne Dateien aus remote 236-MB-zip via HTTP Range lesen
 │   │   ├── csv.js        # GTFS-CSV-Parser
-│   │   ├── index.js      # statischer GTFS-Indexaufbau + Disk-Cache (~18 MB)
+│   │   ├── index.js      # statischer GTFS-Indexaufbau + Disk-Cache (~18 MB, mit Stop-Koordinaten)
 │   │   └── feed.js       # GTFS-RT-Feed: laden, dekodieren, joinen
 │   └── tools/
-│       └── gtfs-rt.js    # dsw21_delays, gtfs_rt_delays, gtfs_rt_alerts
+│       ├── gtfs-rt.js    # dsw21_delays, gtfs_rt_delays, gtfs_rt_alerts
+│       ├── location.js   # current_location, nearby_stops
+│       └── journey.js    # plan_journey (Transitous/MOTIS)
 └── test/
-    ├── gtfs.test.js      # Offline-CSV- + Stop-Auflösungs-Tests
+    ├── gtfs.test.js      # Offline-CSV- + Stop-Auflösungs- + Nahstations-Tests
     ├── gtfsrt-live.js    # Live-GTFS-RT-Pipeline-Test
+    ├── loc-live.mjs      # Live-Test der Standort-/Verbindungs-Tools (Netzwerk)
     ├── smoke.js          # MCP-stdio-Tool-Registrierungstest
     └── smoke-http.js     # MCP-Streamable-HTTP-Test (inkl. Session-DELETE)
 ```
@@ -640,4 +798,6 @@ dsw21-mcp/
 # 9. Datenquellen & Lizenz
 
 * GTFS-RT-Stream & statischer Fahrplan: [gtfs.de](https://gtfs.de/de/realtime/) — CC BY-SA 4.0 / CC BY 4.0, bereitgestellt von DELFI e.V. und regionalen Verbünden; **ohne jegliche Garantie**. Bitte die [Transitous-Nutzungsrichtlinie](https://transitous.org/api/) für alternative Zugriffswege beachten.
+* Verbindungsplanung: [Transitous](https://transitous.org)-MOTIS-Instanz — kostenloser Community-Dienst mit GTFS/GTFS-RT-Feeds für Deutschland; dieser Server sendet einen identifizierenden User-Agent und cached Itineraries 10 Minuten.
+* IP-Geolokalisierung: [ipwho.is](https://ipwho.is) — kostenlose HTTPS-API, ohne Key; max. einmal pro Client-IP pro 10 Minuten abgefragt.
 * Dieser Server: ISC-Lizenz. Repository: https://github.com/sashok53011/dsw21-mcp

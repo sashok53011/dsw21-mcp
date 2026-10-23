@@ -4,6 +4,8 @@
 
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {registerGtfsRtTools} from './tools/gtfs-rt.js';
+import {registerLocationTools} from './tools/location.js';
+import {registerJourneyTools} from './tools/journey.js';
 
 /**
  * Builds a fully wired McpServer (all tools registered).
@@ -11,10 +13,12 @@ import {registerGtfsRtTools} from './tools/gtfs-rt.js';
 const createMcpServer = () => {
 	const server = new McpServer({
 		name: 'dsw21-mcp',
-		version: '0.2.0',
+		version: '0.3.0',
 	});
 
 	registerGtfsRtTools(server);
+	registerLocationTools(server);
+	registerJourneyTools(server);
 
 	return {server};
 };

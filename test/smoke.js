@@ -4,7 +4,7 @@
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 
-const EXPECTED = ['dsw21_delays', 'gtfs_rt_alerts', 'gtfs_rt_delays'];
+const EXPECTED = ['current_location', 'dsw21_delays', 'gtfs_rt_alerts', 'gtfs_rt_delays', 'nearby_stops', 'plan_journey'];
 
 const transport = new StdioClientTransport({
 	command: process.execPath,

@@ -17,6 +17,8 @@ import http from 'node:http';
 import {randomUUID} from 'node:crypto';
 import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {createMcpServer} from './server.js';
+import {setLocation, currentLocation, LOCATE_PAGE, LOCATE_PAGE_PATH} from './location.js';
+import {setClientIp} from './tools/location.js';
 
 const PORT = Number(process.env.MCP_HTTP_PORT ?? 8003);
 const HOST = process.env.MCP_HTTP_HOST || '127.0.0.1';
@@ -66,8 +68,46 @@ const httpServer = http.createServer(async (req, res) => {
 		res.writeHead(200, {'Content-Type': 'text/plain'}).end('ok');
 		return;
 	}
+
+	// Real client IP: Cloudflare tunnel passes it in Cf-Connecting-Ip; a direct
+	// reverse proxy may pass X-Forwarded-For. Used by the IP-geolocation
+	// fallback of current_location / nearby_stops / plan_journey.
+	const clientIp = req.headers['cf-connecting-ip']
+		|| String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+		|| null;
+	setClientIp(clientIp);
+
+	if (pathname === LOCATE_PAGE_PATH) {
+		if (req.method === 'GET') {
+			res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'}).end(LOCATE_PAGE);
+			return;
+		}
+		if (req.method === 'POST') {
+			try {
+				const raw = await readBody(req);
+				const body = JSON.parse(raw || '{}');
+				const lat = Number(body.lat);
+				const lon = Number(body.lon);
+				if (!Number.isFinite(lat) || !Number.isFinite(lon)
+					|| Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+					sendJson(res, 400, {ok: false, error: 'invalid coordinates'});
+					return;
+				}
+				const saved = await setLocation({lat, lon, accuracy: body.accuracy});
+				console.error(`[dsw21-mcp] location updated via /locate: ${saved.lat.toFixed(5)},${saved.lon.toFixed(5)} (±${saved.accuracy ?? '?'}m)`);
+				sendJson(res, 200, {ok: true});
+			} catch (err) {
+				console.error('[dsw21-mcp] /locate POST failed:', err?.message || err);
+				sendJson(res, 500, {ok: false, error: 'storage failure'});
+			}
+			return;
+		}
+		res.writeHead(405, {Allow: 'GET, POST'}).end('Method Not Allowed');
+		return;
+	}
+
 	if (pathname !== '/mcp') {
-		res.writeHead(404, {'Content-Type': 'text/plain'}).end('Not found. MCP endpoint: /mcp');
+		res.writeHead(404, {'Content-Type': 'text/plain'}).end(`Not found. MCP endpoint: /mcp · location page: ${LOCATE_PAGE_PATH} · health: /health`);
 		return;
 	}
 
