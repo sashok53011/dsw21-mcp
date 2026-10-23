@@ -14,8 +14,8 @@ const currentLocationTool = (server) => {
 	server.tool(
 		'current_location',
 		bilingual(
-			'Where the user currently is. Sources: precise GPS shared via the /locate page (open it once on the phone — coordinates stay on this server), or LOCATION_LAT/LOCATION_LON env vars as a static fallback. There is no IP geolocation (too imprecise). If no location is known, tell the user to open the /locate page — do not guess. Use this instead of asking the user where they are.',
-			'Wo sich der Nutzer gerade befindet. Quellen: präzises GPS über die /locate-Seite (einmal im Handy öffnen — Koordinaten bleiben auf diesem Server) oder LOCATION_LAT/LOCATION_LON (Env-Variablen, statischer Fallback). Keine IP-Geolokalisierung (zu ungenau). Ist kein Standort bekannt, dem Nutzer sagen, die /locate-Seite zu öffnen — nicht raten. Dies verwenden, statt den Nutzer nach dem Standort zu fragen.',
+			'LAST-RESORT location of the user (server-side). Use this ONLY if the MCP client has no location tool of its own. If the client can read GPS itself (e.g. zerotap’s location tool), call THAT instead and pass the resulting coordinates to plan_journey/nearby_stops as from / latitude+longitude — never ask the user where they are. Server-side sources: precise GPS from the /locate page (open it once on the phone — coordinates stay on this server) or LOCATION_LAT/LOCATION_LON env vars; no IP geolocation. If nothing is known, tell the user to open the /locate page — do not guess.',
+			'LETZTE-INSTANZ-Standort des Nutzers (serverseitig). NUR nutzen, wenn der MCP-Client kein eigenes Standort-Tool hat. Wenn der Client selbst GPS lesen kann (z. B. das Standort-Tool von zerotap), DIESSES aufrufen und die Koordinaten an plan_journey/nearby_stops als from bzw. latitude+longitude übergeben — den Nutzer niemals nach dem Standort fragen. Serverseitige Quellen: präzises GPS von der /locate-Seite (einmal am Handy öffnen — Koordinaten bleiben auf diesem Server) oder LOCATION_LAT/LOCATION_LON; keine IP-Geolokalisierung. Ist nichts bekannt, dem Nutzer sagen, die /locate-Seite zu öffnen — nicht raten.',
 		),
 		{
 			language: languageField,
@@ -68,8 +68,8 @@ const nearbyStopsTool = (server) => {
 	server.tool(
 		'nearby_stops',
 		bilingual(
-			'Stops/stations near a location (default: the current location from current_location), sorted by distance, deduplicated per station. Use the returned stopId with dsw21_delays / gtfs_rt_delays.',
-			'Haltestellen/Stationen nahe einer Position (Standard: die aktuelle Position aus current_location), nach Entfernung sortiert, pro Station dedupliziert. Die zurückgegebene stopId mit dsw21_delays / gtfs_rt_delays verwenden.',
+			'Stops/stations near a point, sorted by distance, deduplicated per station. ORIGIN PRIORITY: if the MCP client has its own location tool (e.g. zerotap’s location tool), call it FIRST and pass the coordinates as latitude/longitude here — do not ask the user where they are. If latitude/longitude are omitted, the server-side current_location is used as a fallback (needs the /locate page). Use the returned stopId with dsw21_delays / gtfs_rt_delays.',
+			'Haltestellen/Stationen nahe einem Punkt, nach Entfernung sortiert, pro Station dedupliziert. START-PRIORITÄT: wenn der MCP-Client ein eigenes Standort-Tool hat (z. B. das Standort-Tool von zerotap), dies ZUERST aufrufen und die Koordinaten als latitude/longitude hier übergeben — den Nutzer nicht nach dem Standort fragen. Werden latitude/longitude weggelassen, dient der serverseitige current_location als Fallback (braucht die /locate-Seite). Die zurückgegebene stopId mit dsw21_delays / gtfs_rt_delays verwenden.',
 		),
 		{
 			latitude: z.number().min(-90).max(90).optional()

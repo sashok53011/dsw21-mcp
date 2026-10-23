@@ -16,7 +16,7 @@ const MOTIS_API = process.env.TRANSITOUS_URL || 'https://api.transitous.org/api'
 // Transitous rejects generic/absent User-Agents (403, usage policy) — every
 // request must identify the client.
 const userAgent = process.env.DB_USER_AGENT
-	|| 'dsw21-mcp/0.4.0 (+https://github.com/sashok53011/dsw21-mcp)';
+	|| 'dsw21-mcp/0.4.1 (+https://github.com/sashok53011/dsw21-mcp)';
 
 const cache = new TtlCache();
 const GEOCODE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -132,8 +132,8 @@ const planJourney = (server) => {
 	server.tool(
 		'plan_journey',
 		bilingual(
-			'Plan a public-transport journey (Transitous/Germany-wide coverage) with realtime updates. The destination may be a place name or "lat,lon"; the origin defaults to the current location (current_location) — do not ask the user where they are. Use arriveBy=true with "time" to plan backwards ("I must arrive by 17:00"). Returns itineraries with legs, transfers, delays and platforms.',
-			'Öffentliche Verbindung planen (Transitous, deutschlandweite Abdeckung) mit Echtzeit-Updates. Das Ziel kann ein Ortsname oder "lat,lon" sein; der Start ist standardmäßig die aktuelle Position (current_location) — nicht den Nutzer nach dem Standort fragen. Mit arriveBy=true und "time" rückwärts planen („Ich muss um 17:00 ankommen"). Gibt Itineraries mit Abschnitten, Umstiegen, Verspätungen und Gleisen zurück.',
+			'Plan a public-transport journey (Transitous/Germany-wide coverage) with realtime updates. ORIGIN PRIORITY: if the MCP client has its own location tool (e.g. zerotap’s location/coordinates tool), call it FIRST and pass those coordinates here as from="lat,lon" — that is the most reliable origin. Do not ask the user where they are, and do not use current_location when a client location tool exists. Destination: place name or "lat,lon". Use arriveBy=true with "time" to plan backwards ("I must arrive by 17:00"). Returns itineraries with legs, transfers, delays and platforms.',
+			'Öffentliche Verbindung planen (Transitous, deutschlandweite Abdeckung) mit Echtzeit-Updates. START-PRIORITÄT: wenn der MCP-Client ein eigenes Standort-Tool hat (z. B. das Standort-/Koordinaten-Tool von zerotap), dies ZUERST aufrufen und die Koordinaten hier als from="lat,lon" übergeben — das ist die zuverlässigste Quelle. Den Nutzer nicht nach dem Standort fragen und current_location nicht nutzen, wenn ein Client-Standort-Tool existiert. Ziel: Ortsname oder "lat,lon". Mit arriveBy=true und "time" rückwärts planen ("Ich muss um 17:00 ankommen"). Gibt Itineraries mit Abschnitten, Umstiegen, Verspätungen und Gleisen zurück.',
 		),
 		{
 			to: z.string().min(1).describe(bilingual('Destination: place name (e.g. "Köln Hbf") or "lat,lon".', 'Ziel: Ortsname (z. B. "Köln Hbf") oder "lat,lon".')),
