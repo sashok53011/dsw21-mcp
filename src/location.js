@@ -1,18 +1,18 @@
-// User location: GPS (via the /locate page), env override, IP geolocation.
+// User location: precise GPS only, shared via the /locate page (plus an
+// optional static env override for machines without a phone browser).
 //
 // Priority order for current_location():
 //   1. GPS coordinates posted from the /locate page (stored in a JSON file so
 //      they survive server restarts; the page keeps them fresh while open),
-//   2. LOCATION_LAT / LOCATION_LON env vars,
-//   3. IP geolocation of the client IP (via the Cloudflare tunnel's
-//      Cf-Connecting-Ip header) — or of this host's public IP in stdio mode.
+//   2. LOCATION_LAT / LOCATION_LON env vars.
+// There is deliberately NO IP geolocation: its accuracy (~20 km, often worse)
+// is useless for journey planning and would route from a wrong point.
 //
-// Privacy: coordinates live on *this* server only (GTFS_INDEX_DIR/location.json).
-// The IP fallback asks ipwho.is once per IP per 10 minutes; it never sees GPS.
+// Privacy: coordinates live on *this* server only (GTFS_INDEX_DIR/location.json)
+// and are never sent anywhere.
 
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
-import {TtlCache} from './cache.js';
 
 const locationFile = () =>
 	process.env.LOCATION_FILE
@@ -52,37 +52,17 @@ const setLocation = async ({lat, lon, accuracy = null}) => {
 };
 
 // ---- IP geolocation --------------------------------------------------------
-
-const ipCache = new TtlCache();
-const IP_TTL_MS = 10 * 60 * 1000;
-
-const geolocateIp = async (ip) => {
-	const key = 'ipgeo:' + (ip || 'self');
-	return ipCache.wrap(key, IP_TTL_MS, async () => {
-		const url = ip ? `https://ipwho.is/${encodeURIComponent(ip)}` : 'https://ipwho.is/';
-		const res = await fetch(url, {signal: AbortSignal.timeout(8000)});
-		if (!res.ok) throw new Error(`ipwho.is HTTP ${res.status}`);
-		const data = await res.json();
-		if (data.success === false) throw new Error(data.message || 'ipwho.is failure');
-		return {
-			lat: data.latitude,
-			lon: data.longitude,
-			city: data.city || null,
-			country: data.country || null,
-			ip: data.ip || ip || null,
-		};
-	});
-};
+// Deliberately removed: IP-based geolocation (~20 km accuracy) is useless for
+// journey planning — routing from a wrong point is worse than asking the user.
 
 // ---- current location ------------------------------------------------------
 
 /**
- * Resolve the current location.
- * @param {string|null} [clientIp] real client IP (Cf-Connecting-Ip), if known
+ * Resolve the current location (GPS only, plus optional env override).
  * @returns {Promise<{lat: number, lon: number, source: string, accuracy: number|null,
- *   ageMinutes: number|null, city?: string|null, updatedAt?: string}|null>}
+ *   ageMinutes: number|null, updatedAt?: string}|null>}
  */
-const currentLocation = async (clientIp = null) => {
+const currentLocation = async () => {
 	// 1) GPS from the /locate page
 	if (memory === null) memory = await loadFile();
 	if (memory) {
@@ -103,23 +83,6 @@ const currentLocation = async (clientIp = null) => {
 	if (Number.isFinite(lat) && Number.isFinite(lon)) {
 		return {lat, lon, accuracy: null, source: 'env', ageMinutes: null};
 	}
-
-	// 3) IP geolocation
-	try {
-		const ipLoc = await geolocateIp(clientIp);
-		if (Number.isFinite(ipLoc.lat) && Number.isFinite(ipLoc.lon)) {
-			return {
-				lat: ipLoc.lat,
-				lon: ipLoc.lon,
-				city: ipLoc.city,
-				country: ipLoc.country,
-				ip: ipLoc.ip,
-				accuracy: null,
-				ageMinutes: 0,
-				source: 'ip',
-			};
-		}
-	} catch { /* fall through */ }
 
 	return null;
 };
@@ -184,7 +147,6 @@ const LOCATE_PAGE_PATH = '/locate';
 export {
 	setLocation,
 	currentLocation,
-	geolocateIp,
 	LOCATE_PAGE,
 	LOCATE_PAGE_PATH,
 	locationFile,

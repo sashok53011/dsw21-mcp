@@ -18,7 +18,6 @@ import {randomUUID} from 'node:crypto';
 import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {createMcpServer} from './server.js';
 import {setLocation, currentLocation, LOCATE_PAGE, LOCATE_PAGE_PATH} from './location.js';
-import {setClientIp} from './tools/location.js';
 
 const PORT = Number(process.env.MCP_HTTP_PORT ?? 8003);
 const HOST = process.env.MCP_HTTP_HOST || '127.0.0.1';
@@ -68,14 +67,6 @@ const httpServer = http.createServer(async (req, res) => {
 		res.writeHead(200, {'Content-Type': 'text/plain'}).end('ok');
 		return;
 	}
-
-	// Real client IP: Cloudflare tunnel passes it in Cf-Connecting-Ip; a direct
-	// reverse proxy may pass X-Forwarded-For. Used by the IP-geolocation
-	// fallback of current_location / nearby_stops / plan_journey.
-	const clientIp = req.headers['cf-connecting-ip']
-		|| String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
-		|| null;
-	setClientIp(clientIp);
 
 	if (pathname === LOCATE_PAGE_PATH) {
 		if (req.method === 'GET') {

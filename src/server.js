@@ -13,7 +13,7 @@ import {registerJourneyTools} from './tools/journey.js';
 const createMcpServer = () => {
 	const server = new McpServer({
 		name: 'dsw21-mcp',
-		version: '0.3.0',
+		version: '0.4.0',
 	});
 
 	registerGtfsRtTools(server);

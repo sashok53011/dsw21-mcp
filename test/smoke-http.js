@@ -9,7 +9,7 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 
 const START_TIMEOUT_MS = 10_000;
 
-const EXPECTED = ['current_location', 'dsw21_delays', 'gtfs_rt_alerts', 'gtfs_rt_delays', 'nearby_stops', 'plan_journey'];
+const EXPECTED = ['current_location', 'dsw21_delays', 'gtfs_rt_alerts', 'gtfs_rt_delays', 'nearby_stops', 'plan_journey', 'stop_departures', 'trip_status'];
 
 const main = async () => {
 	const child = spawn(process.execPath, ['src/http.js'], {

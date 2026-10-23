@@ -10,20 +10,12 @@ const languageField = z.enum(['en', 'de'])
 	.optional()
 	.describe(bilingual('Output language for status words.', 'Ausgabesprache für Statuswörter.'));
 
-// The HTTP layer stores the real client IP (Cf-Connecting-Ip) here on every
-// /mcp request so the IP-geolocation fallback can see it; stdio leaves it null.
-let activeClientIp = null;
-const setClientIp = (ip) => {
-	activeClientIp = ip || null;
-};
-const getClientIp = () => activeClientIp;
-
 const currentLocationTool = (server) => {
 	server.tool(
 		'current_location',
 		bilingual(
-			'Where the user currently is. Sources in order of preference: GPS shared via the /locate page (open it once on the phone — coordinates stay on this server), then LOCATION_LAT/LOCATION_LON env vars, then IP geolocation (city-level accuracy). Use this instead of asking the user where they are.',
-			'Wo sich der Nutzer gerade befindet. Quellen in Präferenzreihenfolge: GPS über die /locate-Seite (einmal im Handy öffnen — Koordinaten bleiben auf diesem Server), dann LOCATION_LAT/LOCATION_LON (Env-Variablen), dann IP-Geolokalisierung (Genauigkeit auf StadtEbene). Dies verwenden, statt den Nutzer nach dem Standort zu fragen.',
+			'Where the user currently is. Sources: precise GPS shared via the /locate page (open it once on the phone — coordinates stay on this server), or LOCATION_LAT/LOCATION_LON env vars as a static fallback. There is no IP geolocation (too imprecise). If no location is known, tell the user to open the /locate page — do not guess. Use this instead of asking the user where they are.',
+			'Wo sich der Nutzer gerade befindet. Quellen: präzises GPS über die /locate-Seite (einmal im Handy öffnen — Koordinaten bleiben auf diesem Server) oder LOCATION_LAT/LOCATION_LON (Env-Variablen, statischer Fallback). Keine IP-Geolokalisierung (zu ungenau). Ist kein Standort bekannt, dem Nutzer sagen, die /locate-Seite zu öffnen — nicht raten. Dies verwenden, statt den Nutzer nach dem Standort zu fragen.',
 		),
 		{
 			language: languageField,
@@ -32,7 +24,7 @@ const currentLocationTool = (server) => {
 			const lang = resolveLanguage(language);
 			const tt = t(lang);
 			try {
-				const loc = await currentLocation(activeClientIp);
+				const loc = await currentLocation();
 				if (!loc) {
 					return {
 						content: [{
@@ -55,15 +47,11 @@ const currentLocationTool = (server) => {
 					accuracyMeters: loc.accuracy ?? null,
 					ageMinutes: loc.ageMinutes ?? null,
 				};
-				if (loc.city) out.city = loc.city;
-				if (loc.country) out.country = loc.country;
 				// GPS older than 6 h is probably stale — tell the model so it can
 				// mention a refresh instead of routing from an outdated position.
 				if (loc.source === 'gps' && loc.ageMinutes !== null && loc.ageMinutes > 360) {
 					out.stale = true;
 					out.note = tt.locationStale(loc.ageMinutes);
-				} else if (loc.source === 'ip') {
-					out.note = tt.locationIpAccuracy;
 				}
 				return {content: [{type: 'text', text: JSON.stringify(out, null, 1)}]};
 			} catch (err) {
@@ -102,7 +90,7 @@ const nearbyStopsTool = (server) => {
 				let lon = longitude;
 				let source = 'argument';
 				if (lat === undefined || lon === undefined) {
-					const loc = await currentLocation(activeClientIp);
+					const loc = await currentLocation();
 					if (!loc) {
 						return {
 							isError: true,
@@ -161,4 +149,4 @@ const registerLocationTools = (server) => {
 	nearbyStopsTool(server);
 };
 
-export {registerLocationTools, setClientIp, getClientIp};
+export {registerLocationTools};

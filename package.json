@@ -1,6 +1,6 @@
 {
 	"name": "dsw21-mcp",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"description": "MCP server with realtime delay information for DSW21 (Dortmunder Stadtwerke, Dortmund/VRR) via the free GTFS-RT stream realtime.gtfs.de.",
 	"type": "module",
 	"main": "src/index.js",

@@ -6,7 +6,7 @@
 
 MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), который любой MCP-совместимый ИИ-клиент (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) может вызывать, чтобы ответить на вопросы вроде *«Мой трамвай в Дортмунде опаздывает?»*, *«Насколько опаздывает U45?»* или *«Сегодня есть сбои на линиях DSW21?»*.
 
-Данные берутся из **бесплатного GTFS-RT потока [realtime.gtfs.de](https://gtfs.de/en/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), обновление каждые 10 с, с join к статическому расписанию gtfs.de для номеров линий и названий остановок. Покрываются трамваи/автобусы DSW21, U-Bahn и региональный транспорт Дортмунда и всего VRR. Планирование маршрутов (`plan_journey`) использует бесплатный инстанс **[Transitous](https://transitous.org)** MOTIS (агрегация GTFS/GTFS-RT по всей Германии).
+Данные берутся из **бесплатного GTFS-RT потока [realtime.gtfs.de](https://gtfs.de/en/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), обновление каждые 10 с, с join к статическому расписанию gtfs.de для номеров линий и названий остановок. Покрываются трамваи/автобусы DSW21, U-Bahn и региональный транспорт Дортмунда и всего VRR. Планирование маршрутов (`plan_journey`), статус поезда (`trip_status`) и расписания (`stop_departures`) используют бесплатный инстанс **[Transitous](https://transitous.org)** MOTIS (v6 API, агрегация GTFS/GTFS-RT по всей Германии).
 
 ## Инструменты
 
@@ -15,9 +15,11 @@ MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), к
 | `dsw21_delays` | Задержки DSW21 на остановках Дортмунда (удобная обёртка, по умолчанию *Dortmund Hbf*). |
 | `gtfs_rt_delays` | Задержки на **любой** остановке местного транспорта в GTFS-RT потоке (VRR и шире) по имени или числовому ID. |
 | `gtfs_rt_alerts` | Служебные сообщения / сбои, затрагивающие рейсы DSW21, с понятными текстами. |
-| `current_location` | Где находится пользователь: GPS через страницу `/locate` → переменные окружения сервера → IP-геолокация. Используйте вместо вопросов «где вы?». |
+| `current_location` | Где находится пользователь: точный GPS через страницу `/locate` (однократно открыть на телефоне — координаты остаются на сервере). Используйте вместо вопросов «где вы?». |
 | `nearby_stops` | Остановки рядом с позицией (по умолчанию — текущая), по расстоянию — возвращает `stopId` для инструментов задержек. |
-| `plan_journey` | Планирование маршрута с realtime-обновлениями через [Transitous](https://transitous.org) (MOTIS): начало по умолчанию — текущая позиция, цель по имени или координатам. |
+| `plan_journey` | Планирование маршрута с realtime-обновлениями через [Transitous](https://transitous.org) (MOTIS v6): начало по умолчанию — текущая позиция, цель по имени или координатам, `arriveBy` для планирования «назад». |
+| `trip_status` | Один поезд/автобус/трамвай по **всему маршруту, вся Германия**: по каждой станции план/факт, задержки, смены перронов, отмены. |
+| `stop_departures` | Ближайшие отправления с **любой остановки Германии** с realtime — дополняет gtfs.de-инструменты, которые покрывают только регион gtfs.de/VRR. |
 
 Каждый инструмент принимает необязательный параметр **`language`** (`"en"` или `"de"`), который переключает слова статуса (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) и сообщения об ошибках. Имена JSON-полей остаются стабильными независимо от языка. Язык по умолчанию задаётся один раз через `DB_LANG` (раздел 3).
 
@@ -85,7 +87,7 @@ npm test              # офлайн-тесты + регистрация инс�
 npm run test:gtfsrt   # опционально: живая проверка данных DSW21 (скачивание индекса ~18 МБ)
 ```
 
-Ожидаемый вывод: `smoke test passed ✓` со всеми шестью инструментами.
+Ожидаемый вывод: `smoke test passed ✓` со всеми восемью инструментами.
 
 **Примечания для Windows**
 
@@ -166,7 +168,7 @@ node src/index.js    # MCP stdio-сервер; используется Termux-�
 
 ## 1.4 HTTP-режим (Streamable HTTP)
 
-`src/http.js` отдаёт те же шесть инструментов по [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) для постоянно работающих машин — домашний сервер, FreedomBox или VPS за reverse proxy / Cloudflare-туннелем. Мобильные приложения (например, OmniChat для Android) умеют работать только с *удалёнными* MCP-серверами, поэтому это режим для телефона. Дополнительно сервер отдаёт **страницу `/locate`** (раздел 1.5) для передачи GPS-позиции.
+`src/http.js` отдаёт те же восемь инструментов по [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) для постоянно работающих машин — домашний сервер, FreedomBox или VPS за reverse proxy / Cloudflare-туннелем. Мобильные приложения (например, OmniChat для Android) умеют работать только с *удалёнными* MCP-серверами, поэтому это режим для телефона. Дополнительно сервер отдаёт **страницу `/locate`** (раздел 1.5) для передачи GPS-позиции.
 
 ```bash
 npm run start:http          # слушает 127.0.0.1:8003, эндпоинт /mcp (+ /health)
@@ -219,14 +221,15 @@ MCP-эндпоинт становится `https://dsw21-mcp.devhorizon.online/m
 
 ## 1.5 Передача местоположения (страница `/locate`)
 
-Инструменты геолокации (`current_location`, `nearby_stops`, `plan_journey`) определяют позицию пользователя из трёх источников в таком порядке:
+Инструменты геолокации (`current_location`, `nearby_stops`, `plan_journey`) определяют позицию пользователя из двух источников в таком порядке:
 
 1. **GPS через страницу `/locate`** (только HTTP-режим). Однократно откройте `https://<ваш-хост>/locate` в браузере телефона и разрешите геолокацию — страница отправит позицию на сервер (`POST /locate`) и поддерживает её через `watchPosition`, пока открыта вкладка. Координаты хранятся **на вашем собственном сервере** в `GTFS_INDEX_DIR/location.json` (права 600) и переживают перезапуски.
 2. **`LOCATION_LAT` / `LOCATION_LON`** (переменные окружения) — статичная позиция для машин без браузера.
-3. **IP-геолокация** — IP клиента (из заголовка `Cf-Connecting-Ip` Cloudflare-туннеля или `X-Forwarded-For`) разрешается через [ipwho.is](https://ipwho.is) не чаще раза в 10 минут (бесплатно, HTTPS, без ключа). Точность — уровень города. В stdio-режиме используется публичный IP самого сервера.
+
+**IP-геолокации сознательно нет**: её точность (~20 км, часто хуже) бесполезна для планирования маршрутов — строить маршрут от неверной точки хуже, чем попросить пользователя открыть `/locate`.
 
 > **Приватность и доступ**
-> * GPS-координаты никогда не покидают ваш сервер; единственный исходящий запрос — IP клиента в ipwho.is (только при отсутствии GPS, не чаще раза в 10 минут на IP).
+> * GPS-координаты никогда не покидают ваш сервер и никуда не отправляются.
 > * У страницы `/locate` **нет аутентификации** (по договорённости): зная URL, кто угодно не *прочитает*, но может *перезаписать* сохранённую позицию. При секретном имени хоста и защищённом остальном контуре (Cloudflare Access и т. п.) это допустимо для личного использования; URL `/locate` не публикуйте.
 
 ---
@@ -411,7 +414,7 @@ node /home/user/dsw21-mcp/src/index.js
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 2) | node src/index.js
 ```
 
-В ответе — все шесть инструментов: доказательство, что интеграция готова.
+В ответе — все восемь инструментов: доказательство, что интеграция готова.
 
 ## 2.7 Приложение OmniChat для Android (HTTP)
 
@@ -419,7 +422,7 @@ node /home/user/dsw21-mcp/src/index.js
 
 1. Запустите сервер в HTTP-режиме (раздел 1.4) и опубликуйте за контролем доступа (reverse proxy с Basic Auth / Cloudflare Access — см. блок безопасности в 1.4).
 2. В приложении: **вкладка MCP → HTTP →** имя `dsw21-mcp`, URL `https://dsw21-mcp.devhorizon.online/mcp` → добавить → **Connect**.
-3. Приложение выполнит `initialize` + `tools/list` и синхронизирует все шесть инструментов; включайте/отключайте их по отдельности и спрашивайте, например: *«Трамвай в Дортмунде сейчас опаздывает?»*.
+3. Приложение выполнит `initialize` + `tools/list` и синхронизирует все восемь инструментов; включайте/отключайте их по отдельности и спрашивайте, например: *«Трамвай в Дортмунде сейчас опаздывает?»*.
 
 Телефону не нужна локальная среда выполнения — всё работает на сервере. Первый вызов GTFS-RT строит индекс ~18 МБ на стороне сервера (прогрейте его после деплоя, см. 1.4).
 
@@ -435,7 +438,7 @@ node /home/user/dsw21-mcp/src/index.js
 | `GTFS_INDEX_DIR` | `./.gtfs-index` | Каталог кэша статического GTFS-индекса и сохранённой GPS-позиции (`location.json`). |
 | `LOCATION_LAT` / `LOCATION_LON` | *(не заданы)* | Статичные резервные координаты для `current_location` / `nearby_stops` / `plan_journey`, если GPS не передавался. |
 | `LOCATION_FILE` | `<GTFS_INDEX_DIR>/location.json` | Куда сохраняется GPS-позиция со страницы `/locate` (права 600). |
-| `TRANSITOUS_URL` | `https://api.transitous.org/api/v1` | Базовый URL инстанса MOTIS для `plan_journey`. |
+| `TRANSITOUS_URL` | `https://api.transitous.org/api` | Базовый URL инстанса MOTIS для `plan_journey` / `trip_status` / `stop_departures` (пути содержат версию API, например `/v6/plan`). |
 | `MCP_HTTP_PORT` | `8003` | Порт HTTP-режима (`npm run start:http`; `0` — назначает ОС). |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Адрес привязки HTTP-режима. |
 
@@ -588,7 +591,7 @@ node /home/user/dsw21-mcp/src/index.js
 
 ### 4.4 `current_location` — где я нахожусь?
 
-Определяет позицию пользователя (GPS из `/locate` → переменные окружения → IP-геолокация). Используйте вместо вопросов «где вы?».
+Определяет позицию пользователя (точный GPS из `/locate` → статичные переменные окружения). Используйте вместо вопросов «где вы?». IP-геолокации нет — если позиция неизвестна, инструмент сообщает об этом и предлагает открыть страницу `/locate`.
 
 **Аргументы**
 
@@ -602,22 +605,30 @@ node /home/user/dsw21-mcp/src/index.js
 {"name": "current_location", "arguments": {}}
 ```
 
-**Ответ (реальный, IP-фолбэк)**
+**Ответ с GPS-фиксо со страницы `/locate` (реальный)**
 
 ```json
 {
-  "latitude": 51.5149378,
-  "longitude": 7.4655409,
-  "source": "ip",
-  "accuracyMeters": null,
-  "ageMinutes": 0,
-  "city": "Dortmund",
-  "country": "Germany",
-  "note": "Location estimated from the IP address — city-level accuracy only."
+  "latitude": 51.51693,
+  "longitude": 7.46115,
+  "source": "gps",
+  "accuracyMeters": 12,
+  "ageMinutes": 3
 }
 ```
 
-С GPS-фиксо со страницы `/locate` ответ содержит `"source": "gps"`, точность в метрах и `ageMinutes`; позиции старше 6 часов помечаются `"stale": true`.
+Позиции старше 6 часов помечаются `"stale": true` с подсказкой заново открыть `/locate`. **Ответ, когда позиция неизвестна** (реальный):
+
+```json
+{
+  "location": null,
+  "note": "Noch kein Standort bekannt. Die /locate-Seite dieses Servers im Handy-Browser öffnen, um GPS-Koordinaten zu teilen (bleiben auf diesem Server), oder LOCATION_LAT/LOCATION_LON auf dem Server setzen.",
+  "howTo": {
+    "gps": "POST /locate oder <dieser-server>/locate im Handy-Browser öffnen",
+    "env": "LOCATION_LAT und LOCATION_LON auf dem Server setzen"
+  }
+}
+```
 
 ### 4.5 `nearby_stops` — какие остановки рядом?
 
@@ -665,8 +676,10 @@ node /home/user/dsw21-mcp/src/index.js
 |---|---|---|---|
 | `to` | string **обязательный** | – | Цель: название места или `"lat,lon"`. |
 | `from` | string | текущая позиция | Начало: название места или `"lat,lon"`. |
-| `departure` | ISO 8601 | сейчас | Планируемое время отправления. |
-| `maxTransfers` | int 0–10 | – | Максимум пересадок. |
+| `time` | ISO 8601 | сейчас | Время отправления — или прибытия при `arriveBy=true`. |
+| `arriveBy` | boolean | `false` | Планирование «назад»: `time` означает «я должен прибыть к …». |
+| `maxTransfers` | int 0–10 | – | Максимум пересадок (`0` — только прямые рейсы). |
+| `modes` | string[] | все | Фильтр по видам транспорта, например `["TRAM","SUBWAY","BUS"]`. |
 | `results` | int 1–5 | `3` | Число маршрутов. |
 | `language` | `"en"`/`"de"` | `DB_LANG` | Язык слов статуса. |
 
@@ -675,7 +688,8 @@ node /home/user/dsw21-mcp/src/index.js
 ```json
 {"name": "plan_journey", "arguments": {"to": "Dortmund Flughafen", "from": "Dortmund Hbf", "results": 2}}
 {"name": "plan_journey", "arguments": {"to": "51.5231,7.4653", "results": 1}}
-{"name": "plan_journey", "arguments": {"to": "Köln Hbf", "departure": "2026-10-24T17:00:00+02:00", "maxTransfers": 2}}
+{"name": "plan_journey", "arguments": {"to": "Köln Hbf", "time": "2026-10-24T17:00:00+02:00", "arriveBy": true}}
+{"name": "plan_journey", "arguments": {"to": "Flughafen Dortmund", "modes": ["TRAM", "SUBWAY", "BUS"]}}
 ```
 
 **Ответ (реальный, сокращённый)**
@@ -708,6 +722,92 @@ node /home/user/dsw21-mcp/src/index.js
 
 Транзитные сегменты содержат `line`, `headsign`, `tripId`, `track`/`scheduledTrack`, `cancelled` и `delayMin` (realtime против расписания) — те же слова статуса, что и в инструментах задержек.
 
+### 4.7 `trip_status` — где мой поезд и насколько он опаздывает?
+
+Один поезд/автобус/трамвай по **всему маршруту, вся Германия**, с realtime: по каждой станции план/факт, распространение задержки, смены перронов, отмены. `tripId` берётся из сегмента `plan_journey` или из записи `stop_departures`.
+
+**Аргументы**
+
+| Арг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `tripId` | string **обязательный** | – | Trip-ID из сегмента маршрута или записи отправления. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Язык слов статуса. |
+
+**Вызов** (tripId из `stop_departures`)
+
+```json
+{"name": "trip_status", "arguments": {"tripId": "20261023_14:48_de-DELFI_3444084535"}}
+```
+
+**Ответ (реальный, сокращённый)**
+
+```json
+{
+  "source": "Transitous (MOTIS)",
+  "tripId": "20261023_14:48_de-DELFI_3444084535",
+  "line": "U41",
+  "mode": "SUBWAY",
+  "headsign": "Dortmund Clarenberg",
+  "from": "Dortmund Brechten Zentrum",
+  "to": "Dortmund Clarenberg",
+  "depart": "2026-10-23T12:48:00.000Z",
+  "scheduledDepart": "2026-10-23T12:48:00.000Z",
+  "arrive": "2026-10-23T13:20:00.000Z",
+  "scheduledArrive": "2026-10-23T13:19:00.000Z",
+  "delayMin": 0,
+  "status": "on time",
+  "stops": 22,
+  "delayedStops": 7,
+  "stopovers": [
+    { "name": "Dortmund Wittichstraße", "stopId": "de-DELFI_de:05913:515:21:21",
+      "arrival": "2026-10-23T12:49:00.000Z", "scheduledArrival": "2026-10-23T12:49:00.000Z",
+      "arrivalDelayMin": 0, "departure": "2026-10-23T12:49:00.000Z",
+      "scheduledDeparture": "2026-10-23T12:49:00.000Z", "departureDelayMin": 0,
+      "track": "21", "scheduledTrack": "21", "status": "on time" }
+  ]
+}
+```
+
+`delayedStops` мгновенно отвечает на вопрос «насколько далеко разнесётся задержка?»; `track`/`scheduledTrack` по каждой станции показывают смены перронов.
+
+### 4.8 `stop_departures` — расписание любой остановки Германии
+
+Ближайшие отправления с **любой остановки Германии** с realtime (Transitous/MOTIS) — дополняет `dsw21_delays`/`gtfs_rt_delays`, которые покрывают только регион gtfs.de. Полезно для станций дальнего сообщения (Кёльн, Франкфурт, Мюнхен…) и поездок за пределы NRW.
+
+**Аргументы**
+
+| Арг | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `stop` | string **обязательный** | – | Название остановки (геокодируется) или MOTIS stop-id. |
+| `minutes` | int 5–240 | `60` | Окно времени в минутах от текущего момента. |
+| `limit` | int 1–50 | `20` | Минимум отправлений. |
+| `modes` | string[] | все | Фильтр по видам транспорта, например `["HIGHSPEED_RAIL"]`. |
+| `language` | `"en"`/`"de"` | `DB_LANG` | Язык слов статуса. |
+
+**Вызовы**
+
+```json
+{"name": "stop_departures", "arguments": {"stop": "Dortmund Hbf", "minutes": 45, "limit": 6}}
+{"name": "stop_departures", "arguments": {"stop": "Frankfurt (M) Hbf", "modes": ["HIGHSPEED_RAIL", "INTERCITY_TRAIN"], "limit": 10}}
+```
+
+**Ответ (реальный, сокращённый)**
+
+```json
+{
+  "source": "Transitous (MOTIS)",
+  "stop": "Dortmund Hauptbahnhof",
+  "stopId": "at-Railway-Current-Reference-Data-2026_de:05913:131:90:10",
+  "count": 80,
+  "departures": [
+    { "line": "U41", "mode": "SUBWAY", "headsign": "Dortmund Clarenberg",
+      "tripId": "20261023_14:48_de-DELFI_3444084535", "destination": "Dortmund Clarenberg",
+      "depart": "2026-10-23T13:07:00.000Z", "scheduledDepart": "2026-10-23T13:07:00.000Z",
+      "delayMin": 0, "status": "on time", "track": "21", "scheduledTrack": "21" }
+  ]
+}
+```
+
 ---
 
 # 5. Типичный вопрос → рецепты инструментов
@@ -722,7 +822,9 @@ node /home/user/dsw21-mcp/src/index.js
 | *«Как добраться до аэропорта?»* | `plan_journey {"to": "Dortmund Flughafen"}` — начало = текущая позиция |
 | *«Какая остановка рядом со мной?»* | `nearby_stops {}` → `stopId` в `dsw21_delays` |
 | *«Где я?»* | `current_location {}` |
-| *«Поезд в Кёльн в 17:00 — как добраться?»* | `plan_journey {"to": "Köln Hbf", "departure": "…T17:00:00+02:00"}` |
+| *«Поезд в Кёльн в 17:00 — построй маршрут, чтобы успеть»* | `plan_journey {"to": "Köln Hbf", "time": "…T17:00:00+02:00", "arriveBy": true}` |
+| *«Насколько опаздывает моя U41 и где задержка догонит?»* | `stop_departures {"stop": "Dortmund Hbf", "limit": 5}` → `trip_status {"tripId": "…"}` |
+| *«Когда следующий ICE во Франкфурт?»* | `stop_departures {"stop": "Frankfurt (M) Hbf", "modes": ["HIGHSPEED_RAIL"]}` или то же для станции отправления |
 
 # 6. Известные ограничения
 
@@ -732,9 +834,9 @@ node /home/user/dsw21-mcp/src/index.js
 * gtfs.de отмечает **автобусы в VRR-потоке как неполные**; надёжна трамвайно-железнодорожная часть (U- и трамвайные линии DSW21).
 * **HTTP-режим без встроенной аутентификации** — см. блок безопасности в разделе 1.4; публикуйте только за контролем доступа.
 * HTTP-режим не отдаёт standalone SSE (`GET /mcp` отвечает `405`); поддерживаемые клиенты используют `POST` и не затронуты.
-* **IP-геолокация работает на уровне города** и зависит от стороннего сервиса (ipwho.is); точный источник — GPS через `/locate`. Без GPS `plan_journey` может стартовать из центра города.
+* **Нет позиции → нет автоматического начала маршрута**: `plan_journey`/`nearby_stops` без явных координат требуют GPS-фикс со страницы `/locate` (или переменных окружения). IP-геолокация сознательно не используется (~20 км точности бесполезны для планирования).
 * Страница **`/locate` без аутентификации** — зная URL, кто угодно может *перезаписать* сохранённую позицию (раздел 1.5). Она ничего не раскрывает, но держите URL в секрете.
-* **Маршруты приходят из Transitous** (бесплатный общественный сервис, агрегация GTFS/GTFS-RT по Германии) — соблюдайте его [политику использования](https://transitous.org/api/); сервер кэширует маршруты на 10 минут. Покрытие следует фидам, поэтому отдельные региональные перевозчики могут отсутствовать.
+* **Маршруты, поезда и расписания приходят из Transitous** (бесплатный общественный сервис, агрегация GTFS/GTFS-RT по Германии, API MOTIS v6) — соблюдайте его [политику использования](https://transitous.org/api/); сервер кэширует маршруты на 10 минут, табло — на 30 секунд. Покрытие следует фидам, поэтому отдельные региональные перевозчики могут отсутствовать.
 
 # 7. Решение проблем
 
@@ -750,10 +852,11 @@ node /home/user/dsw21-mcp/src/index.js
 | HTTP: соединение обрывается через ~60–100 с | Бесплатный тир Cloudflare рвёт idle-соединения на 100 с. Прогревайте GTFS-индекс после каждого перезапуска (один вызов инструмента) и/или включите keep-alive пинги в клиенте. |
 | HTTP: `405 Method Not Allowed` на `GET /mcp` | Нормально — standalone SSE не поддерживается; клиенты используют `POST`. |
 | HTTP: `connection refused` | Сервер не запущен или неверные `MCP_HTTP_HOST`/`MCP_HTTP_PORT`. Проверьте `curl http://127.0.0.1:8003/health` → `ok`. |
-| `current_location` возвращает `"source": "ip"` или точность уровня города | GPS ещё не передавался — откройте `https://<хост>/locate` в браузере телефона и держите вкладку открытой, либо задайте `LOCATION_LAT`/`LOCATION_LON`. |
+| `current_location` сообщает, что позиция неизвестна | GPS ещё не передавался — откройте `https://<хост>/locate` в браузере телефона и держите вкладку открытой, либо задайте `LOCATION_LAT`/`LOCATION_LON`. IP-геолокация сознательно не используется. |
 | `current_location` сообщает `"stale": true` | GPS-позиция старше 6 часов — снова откройте страницу `/locate`. |
+| `plan_journey`/`stop_departures`: `Place "…" not found` | Геокодер не узнал название — используйте более точное имя или `"lat,lon"`. |
 | `plan_journey`: `MOTIS … 403 Generic user-agent` | Transitous отклоняет обобщённые User-Agent — задайте `DB_USER_AGENT` на сервере (в этой сборке уже есть значение по умолчанию; собственный UA вежливее). |
-| `plan_journey`: `Place "…" not found` | Геокодер не узнал название — используйте более точное имя или `"lat,lon"`. |
+| `trip_status`: `Trip "…" not found` | Поезд уже прошёл маршрут или ID устарел — возьмите свежую `tripId` из `stop_departures` или из сегмента `plan_journey`. |
 | `nearby_stops` возвращает 0 остановок | Слишком мал радиус или позиция в глуши — увеличьте `radius` (макс. 5000 м). |
 | Android: приложение-клиент не видит сервер | Мобильные облачные приложения (Claude/ChatGPT) поддерживают только *удалённый* MCP; запускайте агентов внутри Termux или разворачивайте HTTP-режим на сервере (раздел 1.4). |
 
@@ -776,7 +879,7 @@ dsw21-mcp/
 │   ├── server.js         # общая фабрика McpServer для обеих точек входа
 │   ├── cache.js          # in-memory TTL-кэш
 │   ├── i18n.js           # строки en/de + разрешение языка
-│   ├── location.js       # позиция пользователя: страница /locate, файл GPS, IP-геолокация
+│   ├── location.js       # позиция пользователя: страница /locate + файл GPS (без IP-геолокации)
 │   ├── nearby.js         # расстояние гаверсинуса + поиск ближайших остановок (чистая логика)
 │   ├── gtfs/
 │   │   ├── zip.js        # чтение отдельных файлов из удалённого zip 236 МБ через HTTP Range
@@ -798,6 +901,5 @@ dsw21-mcp/
 # 9. Источники данных и лицензия
 
 * GTFS-RT поток и статическое расписание: [gtfs.de](https://gtfs.de/en/realtime/) — CC BY-SA 4.0 / CC BY 4.0, предоставляется DELFI e.V. и региональными объединениями; **без каких-либо гарантий**. Пожалуйста, соблюдайте [политику использования Transitous](https://transitous.org/api/) для альтернативных способов доступа.
-* Планирование маршрутов: инстанс [Transitous](https://transitous.org) MOTIS — бесплатный общественный сервис с фидами GTFS/GTFS-RT по Германии; этот сервер отправляет идентифицирующий User-Agent и кэширует маршруты на 10 минут.
-* IP-геолокация: [ipwho.is](https://ipwho.is) — бесплатный HTTPS API без ключа; запрашивается не чаще раза в 10 минут на каждый IP клиента.
+* Планирование маршрутов, статус поездов и расписания: инстанс [Transitous](https://transitous.org) MOTIS (v6 API) — бесплатный общественный сервис с фидами GTFS/GTFS-RT по Германии; этот сервер отправляет идентифицирующий User-Agent и кэширует ответы (маршруты 10 минут, табло 30 секунд).
 * Этот сервер: лицензия ISC. Репозиторий: https://github.com/sashok53011/dsw21-mcp
