@@ -8,6 +8,7 @@ import {z} from 'zod';
 import {bilingual, t, resolveLanguage} from '../i18n.js';
 import {loadIndex, DEFAULT_ZIP_URL} from '../gtfs/index.js';
 import {queryDelays, queryAlerts, DEFAULT_FEED_URL} from '../gtfs/feed.js';
+import {berlinIso} from '../time.js';
 
 const languageField = z.enum(['en', 'de'])
 	.optional()
@@ -51,7 +52,8 @@ const resolveGtfsStop = (index, query) => {
 };
 
 const formatRecord = (rec, tt) => {
-	const iso = (epoch) => epoch ? new Date(epoch * 1000).toISOString() : null;
+	// epoch (seconds) -> ISO 8601 with explicit Europe/Berlin offset.
+	const iso = (epoch) => epoch ? berlinIso(epoch * 1000) : null;
 	return {
 		stopId: rec.stopId,
 		stopName: null, // filled by caller when known
@@ -110,7 +112,7 @@ const gtfsDelays = (server) => {
 						type: 'text',
 						text: JSON.stringify({
 							source: 'GTFS-RT (realtime.gtfs.de)',
-							feedTimestamp: res.feedTimestamp ? new Date(res.feedTimestamp * 1000).toISOString() : null,
+							feedTimestamp: res.feedTimestamp ? berlinIso(res.feedTimestamp * 1000) : null,
 							stop: resolved.name,
 							stopId: resolved.primaryId,
 							stopIdCount: resolved.stopIds.size,

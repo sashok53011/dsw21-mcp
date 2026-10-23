@@ -9,6 +9,7 @@
 import {z} from 'zod';
 import {bilingual, t, resolveLanguage} from '../i18n.js';
 import {currentLocation} from '../location.js';
+import {berlinIso} from '../time.js';
 import {TtlCache} from '../cache.js';
 
 const MOTIS_API = process.env.TRANSITOUS_URL || 'https://api.transitous.org/api';
@@ -16,7 +17,7 @@ const MOTIS_API = process.env.TRANSITOUS_URL || 'https://api.transitous.org/api'
 // Transitous rejects generic/absent User-Agents (403, usage policy) — every
 // request must identify the client.
 const userAgent = process.env.DB_USER_AGENT
-	|| 'dsw21-mcp/0.4.1 (+https://github.com/sashok53011/dsw21-mcp)';
+	|| 'dsw21-mcp/0.5.0 (+https://github.com/sashok53011/dsw21-mcp)';
 
 const cache = new TtlCache();
 const GEOCODE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -64,7 +65,10 @@ const resolvePlace = async (query, lang) => {
 	return out;
 };
 
-const iso = (s) => (s ? new Date(s).toISOString() : null);
+// Output timestamps: ISO 8601 with explicit Europe/Berlin offset (LLM clients
+// misread trailing "Z" as local time). Note: params.time below stays UTC — that
+// is an API *input* for MOTIS, not user-facing output.
+const iso = (s) => berlinIso(s);
 const delayMin = (actual, scheduled) => {
 	if (!actual || !scheduled) return null;
 	return Math.round((new Date(actual) - new Date(scheduled)) / 60000);

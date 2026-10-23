@@ -448,6 +448,8 @@ node /home/user/dsw21-mcp/src/index.js
 
 # 4. Примеры использования всех инструментов
 
+**Формат времени:** все метки времени в ответах — ISO 8601 с **явным смещением Europe/Berlin** (например, `2026-10-23T16:00:00.000+02:00` летом, `+01:00` зимой) — никогда не голый UTC `Z` — чтобы клиенты и модели никогда не приняли их за неверные настенные часы.
+
 Примеры показывают JSON-**аргументы** инструмента и **типичный ответ**. Ответы ниже — реальные снимки от 2026-10-19 — фактические значения зависят от времени суток.
 
 ### 4.1 `dsw21_delays` — задержки DSW21 на остановке Дортмунда
@@ -482,22 +484,22 @@ node /home/user/dsw21-mcp/src/index.js
     {
       "stopId": "547755", "stopName": "Dortmund Hbf", "tripId": "694037",
       "line": "400", "headsign": null,
-      "scheduled": "2026-10-19T10:45:35.000Z",
-      "expected":  "2026-10-19T10:46:10.000Z",
+      "scheduled": "2026-10-19T12:45:35.000+02:00",
+      "expected":  "2026-10-19T12:46:10.000+02:00",
       "delayMin": 1, "status": "Verspätung"
     },
     {
       "stopId": "343399", "stopName": "Dortmund Hbf", "tripId": "584030",
       "line": "412", "headsign": null,
-      "scheduled": "2026-10-19T10:55:34.000Z",
-      "expected":  "2026-10-19T10:58:08.000Z",
+      "scheduled": "2026-10-19T12:55:34.000+02:00",
+      "expected":  "2026-10-19T12:58:08.000+02:00",
       "delayMin": 3, "status": "Verspätung"
     },
     {
       "stopId": "462694", "stopName": "Dortmund Hbf", "tripId": "1601850",
       "line": "U45", "headsign": null,
-      "scheduled": "2026-10-19T10:56:05.000Z",
-      "expected":  "2026-10-19T10:57:34.000Z",
+      "scheduled": "2026-10-19T12:56:05.000+02:00",
+      "expected":  "2026-10-19T12:57:34.000+02:00",
       "delayMin": 1, "status": "Verspätung"
     }
   ]
@@ -541,7 +543,7 @@ node /home/user/dsw21-mcp/src/index.js
 ```json
 {
   "source": "GTFS-RT (realtime.gtfs.de)",
-  "feedTimestamp": "2026-10-19T10:42:20.000Z",
+  "feedTimestamp": "2026-10-19T12:42:20.000+02:00",
   "stop": "Dortmund Hbf",
   "stopId": "199571",
   "stopIdCount": 14,
@@ -702,17 +704,17 @@ node /home/user/dsw21-mcp/src/index.js
   "count": 2,
   "itineraries": [
     {
-      "departAt": "2026-10-23T12:03:00.000Z",
-      "arriveAt": "2026-10-23T13:05:00.000Z",
+      "departAt": "2026-10-23T14:03:00.000+02:00",
+      "arriveAt": "2026-10-23T15:05:00.000+02:00",
       "durationMin": 62,
       "transfers": 1,
       "legs": [
         { "mode": "WALK", "from": "START", "to": "Dortmund Kampstraße",
-          "depart": "2026-10-23T12:03:00.000Z", "arrive": "2026-10-23T12:09:00.000Z",
+          "depart": "2026-10-23T14:03:00.000+02:00", "arrive": "2026-10-23T14:09:00.000+02:00",
           "distanceMeters": 450 },
         { "mode": "SUBWAY", "line": "U43", "headsign": "Dortmund Westfalenhütte",
           "from": "Dortmund Kampstraße", "to": "…",
-          "depart": "2026-10-23T12:14:00.000Z", "scheduledDepart": "2026-10-23T12:12:00.000Z",
+          "depart": "2026-10-23T14:14:00.000+02:00", "scheduledDepart": "2026-10-23T14:12:00.000+02:00",
           "delayMin": 2, "status": "delayed", "track": "23", "scheduledTrack": "23" }
       ]
     }
@@ -750,19 +752,19 @@ node /home/user/dsw21-mcp/src/index.js
   "headsign": "Dortmund Clarenberg",
   "from": "Dortmund Brechten Zentrum",
   "to": "Dortmund Clarenberg",
-  "depart": "2026-10-23T12:48:00.000Z",
-  "scheduledDepart": "2026-10-23T12:48:00.000Z",
-  "arrive": "2026-10-23T13:20:00.000Z",
-  "scheduledArrive": "2026-10-23T13:19:00.000Z",
+  "depart": "2026-10-23T14:48:00.000+02:00",
+  "scheduledDepart": "2026-10-23T14:48:00.000+02:00",
+  "arrive": "2026-10-23T15:20:00.000+02:00",
+  "scheduledArrive": "2026-10-23T15:19:00.000+02:00",
   "delayMin": 0,
   "status": "on time",
   "stops": 22,
   "delayedStops": 7,
   "stopovers": [
     { "name": "Dortmund Wittichstraße", "stopId": "de-DELFI_de:05913:515:21:21",
-      "arrival": "2026-10-23T12:49:00.000Z", "scheduledArrival": "2026-10-23T12:49:00.000Z",
-      "arrivalDelayMin": 0, "departure": "2026-10-23T12:49:00.000Z",
-      "scheduledDeparture": "2026-10-23T12:49:00.000Z", "departureDelayMin": 0,
+      "arrival": "2026-10-23T14:49:00.000+02:00", "scheduledArrival": "2026-10-23T14:49:00.000+02:00",
+      "arrivalDelayMin": 0, "departure": "2026-10-23T14:49:00.000+02:00",
+      "scheduledDeparture": "2026-10-23T14:49:00.000+02:00", "departureDelayMin": 0,
       "track": "21", "scheduledTrack": "21", "status": "on time" }
   ]
 }
@@ -802,7 +804,7 @@ node /home/user/dsw21-mcp/src/index.js
   "departures": [
     { "line": "U41", "mode": "SUBWAY", "headsign": "Dortmund Clarenberg",
       "tripId": "20261023_14:48_de-DELFI_3444084535", "destination": "Dortmund Clarenberg",
-      "depart": "2026-10-23T13:07:00.000Z", "scheduledDepart": "2026-10-23T13:07:00.000Z",
+      "depart": "2026-10-23T15:07:00.000+02:00", "scheduledDepart": "2026-10-23T15:07:00.000+02:00",
       "delayMin": 0, "status": "on time", "track": "21", "scheduledTrack": "21" }
   ]
 }
