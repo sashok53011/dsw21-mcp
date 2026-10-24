@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// dsw21-mcp — MCP server exposing realtime delay information for DSW21
-// (Dortmunder Stadtwerke, Dortmund/VRR) via GTFS-RT.
+// dsw21-mcp — MCP server for public transport across Germany: realtime
+// delays, timetables and journeys (Transitous/MOTIS + gtfs.de GTFS-RT),
+// with the DSW21 network (Dortmund) in detail.
 // Transport: stdio. For Streamable HTTP (always-on hosts) see src/http.js.
 
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';

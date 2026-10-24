@@ -1,25 +1,27 @@
 # dsw21-mcp
 
-**Realtime delay information for DSW21 (Dortmunder Stadtwerke) in Dortmund / VRR — as an MCP server.**
+**Public-transport MCP server for the whole of Germany: realtime delays, timetables, journeys and stops — with the DSW21 (Dortmund) network covered in detail.**
 
 [English](readme.md) · [Deutsch](readme.de.md) · [Русский](readme.ru.md)
 
-An MCP ([Model Context Protocol](https://modelcontextprotocol.io)) server that any MCP-capable AI client (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) can call to answer questions like *"Is my tram to Dortmund delayed?"*, *"How late is the U45?"* or *"Are there disruptions on DSW21 lines today?"*.
+An MCP ([Model Context Protocol](https://modelcontextprotocol.io)) server that any MCP-capable AI client (Claude Desktop, hermes-agent, OpenCode, LM Studio, zerotap, …) can call to answer questions like *"When does the next ICE to Berlin leave?"*, *"How do I get from here to the airport?"*, *"Is my tram delayed?"* or *"Are there disruptions on DSW21 lines today?"*.
 
-Data comes from the **free GTFS-RT stream [realtime.gtfs.de](https://gtfs.de/en/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), updated every 10 s, joined against the static gtfs.de schedule to resolve line numbers and station names. It covers DSW21 trams/buses, U-Bahn and regional transit in Dortmund and the whole VRR. Journey planning (`plan_journey`) uses the free **[Transitous](https://transitous.org)** MOTIS instance (Germany-wide GTFS/GTFS-RT aggregation).
+> *The project keeps its historical name `dsw21-mcp` from its original focus on DSW21 in Dortmund — but most tools are Germany-wide.*
+
+**Scope in a nutshell:** journeys, vehicle tracking and timetables (`plan_journey`, `trip_status`, `stop_departures`) work **anywhere in Germany** through the free **[Transitous](https://transitous.org)** MOTIS instance (Germany-wide GTFS/GTFS-RT aggregation); `nearby_stops` searches all 585 000+ stops of the gtfs.de national schedule. The realtime delay tools for local transit (`dsw21_delays`, `gtfs_rt_delays`, `gtfs_rt_alerts`) join the free **GTFS-RT stream [realtime.gtfs.de](https://gtfs.de/en/realtime/)** (updated every 10 s) with the DSW21 agency index — that is the **DSW21 network (Dortmund) in detail**: trams, buses and U-Bahn with delays, cancellations and disruptions.
 
 ## Tools
 
-| Tool | What it does |
-|---|---|
-| `dsw21_delays` | Realtime delays for DSW21 stops in Dortmund (convenience wrapper, defaults to *Dortmund Hbf*). |
-| `gtfs_rt_delays` | Realtime delays for **any** local-transit stop in the GTFS-RT feed (VRR and beyond) by name or numeric id. |
-| `gtfs_rt_alerts` | Service alerts / disruptions affecting DSW21 trips, with human-readable texts. |
-| `current_location` | Where the user is: precise GPS shared via the `/locate` page (open it once on the phone — coordinates stay on this server). Use it instead of asking the user where they are. |
-| `nearby_stops` | Stops near a location (default: current location), sorted by distance — feeds `stopId` into the delay tools. |
-| `plan_journey` | Journey planning with realtime updates via [Transitous](https://transitous.org) (MOTIS v6): origin defaults to the current location, destination by name or coordinates, `arriveBy` for backward planning. |
-| `trip_status` | One vehicle (train/bus/tram) along its whole route anywhere in Germany: per-stop planned vs. expected times, delays, platform changes, cancellations. |
-| `stop_departures` | Next departures at any stop in Germany with realtime — complements the gtfs.de-feed tools that cover only the VRR/gtfs.de region. |
+| Tool | What it does | Coverage |
+|---|---|---|
+| `stop_departures` | Next departures at any stop with realtime: line, delay, platform. | **Germany** |
+| `trip_status` | One vehicle (train/bus/tram) along its whole route: per-stop planned vs. expected times, delay spread, platform changes, cancellations. | **Germany** |
+| `plan_journey` | Journeys with realtime via MOTIS: destination by name or `"lat,lon"`, `arriveBy` for backward planning, `modes` filter. Origin priority: **the client’s own location tool first** (e.g. zerotap) — pass its coordinates as `from="lat,lon"`; `current_location` only as a last resort. | **Germany** |
+| `nearby_stops` | Stops near a point, sorted by distance — feeds `stopId` into the delay tools. Same origin priority as `plan_journey`. | **Germany** (585k stops) |
+| `current_location` | **Last resort for clients without a location tool**: precise GPS from the `/locate` page (open once on the phone — coordinates stay on this server) or `LOCATION_LAT`/`LOCATION_LON` env. If the client can read GPS itself (zerotap etc.), use that instead — never ask the user where they are. | server-side |
+| `dsw21_delays` | Realtime delays at a DSW21 stop (convenience wrapper, defaults to *Dortmund Hbf*). | **DSW21 (Dortmund)** |
+| `gtfs_rt_delays` | Realtime delays for a stop (name or numeric id) from the GTFS-RT stream, joined with the DSW21 agency index. | **DSW21 (Dortmund)** |
+| `gtfs_rt_alerts` | Service alerts / disruptions affecting DSW21 trips, with human-readable texts. | **DSW21 (Dortmund)** |
 
 Every tool accepts an optional **`language`** parameter (`"en"` or `"de"`) that switches status words (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) and error messages. JSON field names stay stable across languages. The default language can be set once via `DB_LANG` (see section 3).
 
@@ -516,9 +518,9 @@ More calls:
 
 > `headsign` (direction) is `null` by design: the gtfs.de local-transit schedule ships no `trip_headsign`. The **line number** comes from `routes.txt`.
 
-### 4.2 `gtfs_rt_delays` — any local-transit stop
+### 4.2 `gtfs_rt_delays` — DSW21 delays at any stop
 
-Same data, but works for **every** stop in the GTFS-RT feed (whole VRR, and other regions too), with more filters.
+Realtime delays for **DSW21 vehicles** (tram/bus/U-Bahn) at a stop of your choice — by name or numeric id. The stop lookup itself works nationwide against the gtfs.de index, but results are filtered to the **DSW21 agency**; for other operators use `stop_departures` (section 4.8).
 
 **Arguments**
 
@@ -593,7 +595,7 @@ Free-text service alerts affecting DSW21 trips; generic attribution notices are 
 
 ### 4.4 `current_location` — where am I?
 
-Resolves the user's position (precise GPS from `/locate` → static env vars). Use this instead of asking the user where they are. There is no IP geolocation — if no position is known, the tool says so and tells the user to open the `/locate` page.
+**Last resort for clients without a location tool** — resolves the server-side position (precise GPS from `/locate` → static env vars). If the client can read GPS itself (e.g. zerotap), use **that** instead and pass the coordinates to `plan_journey`/`nearby_stops` directly. There is no IP geolocation — if no position is known, the tool says so and tells the user to open the `/locate` page.
 
 **Arguments**
 
@@ -827,7 +829,7 @@ Next departures at **any stop in Germany** with realtime (Transitous/MOTIS) — 
 | *"Is anything delayed at Dortmund Kreuzstraße?"* | `gtfs_rt_delays {"stop": "Dortmund Kreuzstraße", "minDelay": 1}` |
 | *"How do I get to the airport?"* | `plan_journey {"to": "Dortmund Flughafen"}` — origin = current location |
 | *"Which stop is near me?"* | `nearby_stops {}` → feed `stopId` into `dsw21_delays` |
-| *"Where am I?"* | `current_location {}` |
+| *"Where am I?"* (only if the client has no location tool) | `current_location {}` |
 | *"The train to Köln leaves at 17:00 — plan so I arrive by then"* | `plan_journey {"to": "Köln Hbf", "time": "…T17:00:00+02:00", "arriveBy": true}` |
 | *"How late is my U41 and where will the delay hit?"* | `stop_departures {"stop": "Dortmund Hbf", "limit": 5}` → `trip_status {"tripId": "…"}` |
 | *"When does the next ICE leave for Frankfurt?"* | `stop_departures {"stop": "Frankfurt (M) Hbf", "modes": ["HIGHSPEED_RAIL"]}` or the same for the origin station |
@@ -836,6 +838,7 @@ Next departures at **any stop in Germany** with realtime (Transitous/MOTIS) — 
 
 * **No platform/track changes** — the GTFS-RT format carries delays and cancellations (`SKIPPED`/`NO_DATA`) only; platforms are static-schedule data.
 * **No direction (`headsign`)** for DSW21 — the gtfs.de local-transit `trips.txt` ships only `route_id,service_id,trip_id`.
+* **`gtfs_rt_delays` / `gtfs_rt_alerts` are limited to the DSW21 agency** — the GTFS-RT join runs against the DSW21 trip index (the stop lookup itself is nationwide). For other operators use `stop_departures` / `trip_status` (Transitous).
 * **First call builds a static index** (~18 MB download via HTTP Range, a few seconds, then cached 24 h in `GTFS_INDEX_DIR`).
 * gtfs.de notes **buses in the VRR feed as incomplete**; tram/rail (DSW21 U- and tram lines) are the reliable part.
 * **HTTP mode has no built-in auth** — see the security box in section 1.4; always publish it behind access control.

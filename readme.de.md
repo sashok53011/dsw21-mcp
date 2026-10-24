@@ -1,25 +1,27 @@
 # dsw21-mcp
 
-**Echtzeit-Verspätungsinformationen für DSW21 (Dortmunder Stadtwerke) in Dortmund / VRR — als MCP-Server.**
+**Öffentlicher-Verkehr-MCP-Server für ganz Deutschland: Echtzeit-Verspätungen, Fahrpläne, Verbindungen und Haltestellen — mit detaillierter Abdeckung des DSW21-Netzes (Dortmund).**
 
 [English](readme.md) · [Deutsch](readme.de.md) · [Русский](readme.ru.md)
 
-Ein MCP-Server ([Model Context Protocol](https://modelcontextprotocol.io)), den jedes MCP-fähige KI-Client (Claude Desktop, hermes-agent, OpenCode, LM Studio, …) aufrufen kann, um Fragen wie *„Ist meine Straßenbahn nach Dortmund verspätet?"*, *„Wie spät ist die U45?"* oder *„Gibt es heute Störungen auf DSW21-Linien?"* zu beantworten.
+Ein MCP-Server ([Model Context Protocol](https://modelcontextprotocol.io)), den jedes MCP-fähige KI-Client (Claude Desktop, hermes-agent, OpenCode, LM Studio, zerotap, …) aufrufen kann, um Fragen wie *„Wann fährt der nächste ICE nach Berlin?"*, *„Wie komme ich von hier zum Flughafen?"*, *„Ist meine Straßenbahn verspätet?"* oder *„Gibt es heute Störungen auf DSW21-Linien?"* zu beantworten.
 
-Die Daten stammen aus dem **kostenlosen GTFS-RT-Stream [realtime.gtfs.de](https://gtfs.de/de/realtime/)** (DELFi/gtfs.de, CC BY-SA 4.0), aktualisiert alle 10 s, verknüpft mit dem statischen gtfs.de-Fahrplan für Liniennummern und Haltestellennamen. Abgedeckt werden DSW21-Straßenbahnen/Busse, U-Bahn und Regionalverkehr in Dortmund und dem gesamten VRR. Verbindungsplanung (`plan_journey`), Fahrzeugstatus (`trip_status`) und Fahrpläne (`stop_departures`) nutzen die kostenlose **[Transitous](https://transitous.org)**-MOTIS-Instanz (v6-API, deutschlandweite GTFS/GTFS-RT-Aggregation).
+> *Der Projektname `dsw21-mcp` ist historisch bedingt (ursprünglicher Fokus: DSW21 in Dortmund) — die meisten Tools sind aber deutschlandweit.*
+
+**Abdeckung auf einen Blick:** Verbindungsplanung, Fahrzeugverfolgung und Fahrpläne (`plan_journey`, `trip_status`, `stop_departures`) funktionieren **überall in Deutschland** über die kostenlose **[Transitous](https://transitous.org)**-MOTIS-Instanz (deutschlandweite GTFS/GTFS-RT-Aggregation); `nearby_stops` durchsucht alle 585.000+ Haltestellen des gtfs.de-Nationalfahrplans. Die Echtzeit-Verspätungstools für den Nahverkehr (`dsw21_delays`, `gtfs_rt_delays`, `gtfs_rt_alerts`) verknüpfen den kostenlosen **GTFS-RT-Stream [realtime.gtfs.de](https://gtfs.de/de/realtime/)** (Aktualisierung alle 10 s) mit dem DSW21-Agentur-Index — das ist das **DSW21-Netz (Dortmund) im Detail**: Straßenbahnen, Busse und U-Bahn mit Verspätungen, Ausfällen und Störungen.
 
 ## Tools
 
-| Tool | Was es tut |
-|---|---|
-| `dsw21_delays` | Echtzeit-Verspätungen an DSW21-Haltestellen in Dortmund (Komfort-Wrapper, Standard *Dortmund Hbf*). |
-| `gtfs_rt_delays` | Echtzeit-Verspätungen an **jeder** Nahverkehrshaltestelle im GTFS-RT-Feed (VRR und darüber hinaus) per Name oder numerischer ID. |
-| `gtfs_rt_alerts` | Service-Meldungen / Störungen betreffend DSW21-Züge, mit Klartext. |
-| `current_location` | Wo sich der Nutzer befindet: präzises GPS über die `/locate`-Seite (einmal im Handy öffnen — Koordinaten bleiben auf diesem Server). Verwenden, statt den Nutzer nach dem Standort zu fragen. |
-| `nearby_stops` | Haltestellen nahe einer Position (Standard: aktuelle Position), nach Entfernung sortiert — liefert `stopId` an die Verspätungs-Tools weiter. |
-| `plan_journey` | Verbindungsplanung mit Echtzeit-Updates über [Transitous](https://transitous.org) (MOTIS v6): Start ist standardmäßig die aktuelle Position, Ziel per Name oder Koordinaten, `arriveBy` fürs Rückwärtsplanen. |
-| `trip_status` | Ein Fahrzeug (Zug/Bus/Straßenbahn) auf der gesamten Strecke, deutschlandweit: pro Haltestelle Soll-/Ist-Zeiten, Verspätungen, Gleisänderungen, Ausfälle. |
-| `stop_departures` | Nächste Abfahrten an **jeder** Haltestelle in Deutschland mit Echtzeit — ergänzt die gtfs.de-Feed-Tools, die nur den VRR/gtfs.de-Bereich abdecken. |
+| Tool | Was es tut | Abdeckung |
+|---|---|---|
+| `stop_departures` | Nächste Abfahrten an jeder Haltestelle mit Echtzeit: Linie, Verspätung, Gleis. | **Deutschland** |
+| `trip_status` | Ein Fahrzeug (Zug/Bus/Straßenbahn) auf der ganzen Strecke: pro Haltestelle Soll-/Ist-Zeiten, Verspätungsausbreitung, Gleisänderungen, Ausfälle. | **Deutschland** |
+| `plan_journey` | Verbindungen mit Echtzeit via MOTIS: Ziel per Name oder `"lat,lon"`, `arriveBy` fürs Rückwärtsplanen, `modes`-Filter. Start-Priorität: **zuerst das eigene Standort-Tool des Clients** (z. B. zerotap) — Koordinaten als `from="lat,lon"` übergeben; `current_location` nur als letzte Instanz. | **Deutschland** |
+| `nearby_stops` | Haltestellen nahe einem Punkt, nach Entfernung sortiert — liefert `stopId` an die Verspätungs-Tools weiter. Gleiche Start-Priorität wie `plan_journey`. | **Deutschland** (585k Haltestellen) |
+| `current_location` | **Letzte Instanz für Clients ohne Standort-Tool**: präzises GPS von der `/locate`-Seite (einmal am Handy öffnen — Koordinaten bleiben auf diesem Server) oder `LOCATION_LAT`/`LOCATION_LON` (Env). Wenn der Client selbst GPS lesen kann (zerotap usw.), dieses verwenden — den Nutzer niemals nach dem Standort fragen. | serverseitig |
+| `dsw21_delays` | Echtzeit-Verspätungen an einer DSW21-Haltestelle (Komfort-Wrapper, Standard *Dortmund Hbf*). | **DSW21 (Dortmund)** |
+| `gtfs_rt_delays` | Echtzeit-Verspätungen für eine Haltestelle (Name oder numerische ID) aus dem GTFS-RT-Stream, verknüpft mit dem DSW21-Agentur-Index. | **DSW21 (Dortmund)** |
+| `gtfs_rt_alerts` | Service-Meldungen / Störungen betreffend DSW21-Züge, mit Klartext. | **DSW21 (Dortmund)** |
 
 Jedes Tool akzeptiert den optionalen Parameter **`language`** (`"en"` oder `"de"`), der Statuswörter (`on time`/`pünktlich`, `delayed`/`Verspätung`, `cancelled`/`fällt aus`) und Fehlermeldungen umschaltet. JSON-Feldnamen bleiben sprachunabhängig stabil. Die Standardsprache kann einmalig über `DB_LANG` gesetzt werden (Abschnitt 3).
 
@@ -516,9 +518,9 @@ Weitere Aufrufe:
 
 > `headsign` (Richtung) ist per Design `null`: der gtfs.de-Nahverkehrsplan liefert kein `trip_headsign`. Die **Liniennummer** kommt aus `routes.txt`.
 
-### 4.2 `gtfs_rt_delays` — jede Nahverkehrshaltestelle
+### 4.2 `gtfs_rt_delays` — DSW21-Verspätungen an jeder Haltestelle
 
-Gleiche Daten, aber für **jede** Haltestelle im GTFS-RT-Feed (gesamter VRR und darüber hinaus), mit mehr Filtern.
+Echtzeit-Verspätungen für **DSW21-Fahrzeuge** (Straßenbahn/Bus/U-Bahn) an einer frei wählbaren Haltestelle — per Name oder numerischer ID. Die Haltestellensuche selbst funktioniert deutschlandweit über den gtfs.de-Index, die Ergebnisse sind aber auf die **DSW21-Agentur** gefiltert; für andere Betreiber `stop_departures` (Abschnitt 4.8) verwenden.
 
 **Argumente**
 
@@ -593,7 +595,7 @@ Textliche Service-Meldungen zu DSW21-Zügen; generische Attribution-Hinweise wer
 
 ### 4.4 `current_location` — wo bin ich?
 
-Löst die Position des Nutzers auf (präzises GPS von `/locate` → statische Env-Variablen). Dies verwenden, statt den Nutzer nach dem Standort zu fragen. Es gibt keine IP-Geolokalisierung — ist keine Position bekannt, sagt das Tool es und weist den Nutzer auf die `/locate`-Seite hin.
+**Letzte Instanz für Clients ohne Standort-Tool** — löst die serverseitige Position auf (präzises GPS von `/locate` → statische Env-Variablen). Wenn der Client selbst GPS lesen kann (z. B. zerotap), **dieses** verwenden und die Koordinaten direkt an `plan_journey`/`nearby_stops` übergeben. Es gibt keine IP-Geolokalisierung — ist keine Position bekannt, sagt das Tool es und weist den Nutzer auf die `/locate`-Seite hin.
 
 **Argumente**
 
@@ -823,7 +825,7 @@ Nächste Abfahrten an **jeder Haltestelle in Deutschland** mit Echtzeit (Transit
 | *„Hat Dortmund Kreuzstraße Verspätung?"* | `gtfs_rt_delays {"stop": "Dortmund Kreuzstraße", "minDelay": 1}` |
 | *„Wie komme ich zum Flughafen?"* | `plan_journey {"to": "Dortmund Flughafen"}` — Start = aktuelle Position |
 | *„Welche Haltestelle ist nah?"* | `nearby_stops {}` → `stopId` an `dsw21_delays` weitergeben |
-| *„Wo bin ich?"* | `current_location {}` |
+| *„Wo bin ich?"* (nur wenn der Client kein Standort-Tool hat) | `current_location {}` |
 | *„Zug nach Köln fährt 17:00 — plant so, dass ich pünktlich ankomme"* | `plan_journey {"to": "Köln Hbf", "time": "…T17:00:00+02:00", "arriveBy": true}` |
 | *„Wie spät ist meine U41 und wo schlägt die Verspätung durch?"* | `stop_departures {"stop": "Dortmund Hbf", "limit": 5}` → `trip_status {"tripId": "…"}` |
 | *„Wann fährt der nächste ICE nach Frankfurt?"* | `stop_departures {"stop": "Frankfurt (M) Hbf", "modes": ["HIGHSPEED_RAIL"]}` oder dasselbe für den Startbahnhof |
@@ -832,6 +834,7 @@ Nächste Abfahrten an **jeder Haltestelle in Deutschland** mit Echtzeit (Transit
 
 * **Keine Gleis-/Steigänderungen** — das GTFS-RT-Format liefert nur Verspätungen und Ausfälle (`SKIPPED`/`NO_DATA`); Gleise sind Statikdaten.
 * **Keine Richtung (`headsign`)** für DSW21 — die gtfs.de-Datei `trips.txt` enthält nur `route_id,service_id,trip_id`.
+* **`gtfs_rt_delays` / `gtfs_rt_alerts` beschränken sich auf die DSW21-Agentur** — das GTFS-RT-Join läuft gegen den DSW21-Trip-Index (die Haltestellensuche selbst ist deutschlandweit). Für andere Betreiber `stop_departures` / `trip_status` (Transitous) verwenden.
 * **Erster Aufruf baut einen statischen Index** (~18 MB Download via HTTP Range, einige Sekunden, danach 24 h in `GTFS_INDEX_DIR` gecacht).
 * gtfs.de nennt **Busse im VRR-Feed unvollständig**; Tram/Schiene (DSW21-U- und Straßenbahnlinien) sind der zuverlässige Teil.
 * **HTTP-Modus ohne eingebaute Auth** — siehe Sicherheitsbox in Abschnitt 1.4; immer hinter Zugriffskontrolle veröffentlichen.
