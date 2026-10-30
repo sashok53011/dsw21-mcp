@@ -8,7 +8,6 @@
 
 import {z} from 'zod';
 import {bilingual, t, resolveLanguage} from '../i18n.js';
-import {currentLocation} from '../location.js';
 import {berlinIso} from '../time.js';
 import {TtlCache} from '../cache.js';
 
@@ -17,7 +16,7 @@ const MOTIS_API = process.env.TRANSITOUS_URL || 'https://api.transitous.org/api'
 // Transitous rejects generic/absent User-Agents (403, usage policy) — every
 // request must identify the client.
 const userAgent = process.env.DB_USER_AGENT
-	|| 'dsw21-mcp/0.5.0 (+https://github.com/sashok53011/dsw21-mcp)';
+	|| 'dsw21-mcp/0.6.0 (+https://github.com/sashok53011/dsw21-mcp)';
 
 const cache = new TtlCache();
 const GEOCODE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -136,12 +135,12 @@ const planJourney = (server) => {
 	server.tool(
 		'plan_journey',
 		bilingual(
-			'Plan a public-transport journey (Transitous/Germany-wide coverage) with realtime updates. ORIGIN PRIORITY: if the MCP client has its own location tool (e.g. zerotap’s location/coordinates tool), call it FIRST and pass those coordinates here as from="lat,lon" — that is the most reliable origin. Do not ask the user where they are, and do not use current_location when a client location tool exists. Destination: place name or "lat,lon". Use arriveBy=true with "time" to plan backwards ("I must arrive by 17:00"). Returns itineraries with legs, transfers, delays and platforms.',
-			'Öffentliche Verbindung planen (Transitous, deutschlandweite Abdeckung) mit Echtzeit-Updates. START-PRIORITÄT: wenn der MCP-Client ein eigenes Standort-Tool hat (z. B. das Standort-/Koordinaten-Tool von zerotap), dies ZUERST aufrufen und die Koordinaten hier als from="lat,lon" übergeben — das ist die zuverlässigste Quelle. Den Nutzer nicht nach dem Standort fragen und current_location nicht nutzen, wenn ein Client-Standort-Tool existiert. Ziel: Ortsname oder "lat,lon". Mit arriveBy=true und "time" rückwärts planen ("Ich muss um 17:00 ankommen"). Gibt Itineraries mit Abschnitten, Umstiegen, Verspätungen und Gleisen zurück.',
+			'Plan a public-transport journey (Transitous/Germany-wide coverage) with realtime updates. Destination: place name or "lat,lon"; origin: place name or "lat,lon" (pass the user\u2019s coordinates when known). Use arriveBy=true with "time" to plan backwards ("I must arrive by 17:00"). Returns itineraries with legs, transfers, delays and platforms.',
+			'Öffentliche Verbindung planen (Transitous, deutschlandweite Abdeckung) mit Echtzeit-Updates. Ziel: Ortsname oder "lat,lon"; Start: Ortsname oder "lat,lon" (Koordinaten übergeben, wenn bekannt). Mit arriveBy=true und "time" rückwärts planen ("Ich muss um 17:00 ankommen"). Gibt Itineraries mit Abschnitten, Umstiegen, Verspätungen und Gleisen zurück.',
 		),
 		{
 			to: z.string().min(1).describe(bilingual('Destination: place name (e.g. "Köln Hbf") or "lat,lon".', 'Ziel: Ortsname (z. B. "Köln Hbf") oder "lat,lon".')),
-			from: z.string().min(1).optional().describe(bilingual('Origin: place name or "lat,lon". Omit to use the current location.', 'Start: Ortsname oder "lat,lon". Weglassen, um die aktuelle Position zu nutzen.')),
+			from: z.string().min(1).describe(bilingual('Origin: place name or "lat,lon" — pass coordinates from your location tool.', 'Start: Ortsname oder "lat,lon" — Koordinaten aus dem eigenen Standort-Tool übergeben.')),
 			time: z.string().optional().describe(bilingual('ISO 8601 time. Departure time, or arrival time when arriveBy=true (default: now).', 'ISO-8601-Zeit. Abfahrtszeit, oder Ankunftszeit bei arriveBy=true (Standard: jetzt).')),
 			arriveBy: z.boolean().optional().describe(bilingual('Interpret "time" as arrival time (plan backwards).', '"time" als Ankunftszeit interpretieren (rückwärts planen).')),
 			maxTransfers: z.number().int().min(0).max(10).optional().describe(bilingual('Maximum number of transfers (0 = direct connections only).', 'Maximale Anzahl Umstiege (0 = nur direkte Verbindungen).')),
@@ -153,20 +152,7 @@ const planJourney = (server) => {
 			const lang = resolveLanguage(language);
 			const tt = t(lang);
 			try {
-				// Origin: explicit or the user's current location.
-				let fromPlace;
-				if (from) {
-					fromPlace = await resolvePlace(from, lang);
-				} else {
-					const use = await currentLocation().catch(() => null);
-					if (!use) {
-						return {
-							isError: true,
-							content: [{type: 'text', text: tt.locationUnknownForJourney}],
-						};
-					}
-					fromPlace = {lat: use.lat, lon: use.lon, name: 'current location'};
-				}
+				const fromPlace = await resolvePlace(from, lang);
 				const toPlace = await resolvePlace(to, lang);
 
 				const params = {

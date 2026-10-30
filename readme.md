@@ -16,9 +16,8 @@ An MCP ([Model Context Protocol](https://modelcontextprotocol.io)) server that a
 |---|---|---|
 | `stop_departures` | Next departures at any stop with realtime: line, delay, platform. | **Germany** |
 | `trip_status` | One vehicle (train/bus/tram) along its whole route: per-stop planned vs. expected times, delay spread, platform changes, cancellations. | **Germany** |
-| `plan_journey` | Journeys with realtime via MOTIS: destination by name or `"lat,lon"`, `arriveBy` for backward planning, `modes` filter. Origin priority: **the client’s own location tool first** (e.g. zerotap) — pass its coordinates as `from="lat,lon"`; `current_location` only as a last resort. | **Germany** |
+| `plan_journey` | Journeys with realtime via MOTIS: destination by name or `"lat,lon"`, `arriveBy` for backward planning, `modes` filter. Pass coordinates from the client's location tool as `from="lat,lon"` when available. | **Germany** |
 | `nearby_stops` | Stops near a point, sorted by distance — feeds `stopId` into the delay tools. Same origin priority as `plan_journey`. | **Germany** (585k stops) |
-| `current_location` | **Last resort for clients without a location tool**: precise GPS from the `/locate` page (open once on the phone — coordinates stay on this server) or `LOCATION_LAT`/`LOCATION_LON` env. If the client can read GPS itself (zerotap etc.), use that instead — never ask the user where they are. | server-side |
 | `dsw21_delays` | Realtime delays at a DSW21 stop (convenience wrapper, defaults to *Dortmund Hbf*). | **DSW21 (Dortmund)** |
 | `gtfs_rt_delays` | Realtime delays for a stop (name or numeric id) from the GTFS-RT stream, joined with the DSW21 agency index. | **DSW21 (Dortmund)** |
 | `gtfs_rt_alerts` | Service alerts / disruptions affecting DSW21 trips, with human-readable texts. | **DSW21 (Dortmund)** |
@@ -40,7 +39,6 @@ The server is a plain Node.js application speaking **MCP over stdio** — your A
 - [1.2 Linux](#12-linux)
 - [1.3 Android (Termux)](#13-android-termux)
 - [1.4 HTTP mode (Streamable HTTP)](#14-http-mode-streamable-http)
-- [1.5 Location sharing (/locate page)](#15-location-sharing-locate-page)
 - [2. MCP client configuration](#2-mcp-client-configuration)
   - [2.1 Claude Desktop & Claude Code](#21-claude-desktop--claude-code)
   - [2.2 hermes-agent (NousResearch)](#22-hermes-agent-nousresearch)
@@ -170,7 +168,7 @@ node src/index.js    # MCP stdio server; used by Termux-compatible agents
 
 ## 1.4 HTTP mode (Streamable HTTP)
 
-`src/http.js` serves the same eight tools over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) for always-on hosts — a home server, FreedomBox or VPS behind a reverse proxy / Cloudflare tunnel. Mobile apps (e.g. the OmniChat Android app) can only reach *remote* MCP servers, so this is the mode to use from a phone. It also serves the **`/locate` page** (see section 1.5) for sharing your GPS position.
+`src/http.js` serves the same eight tools over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) for always-on hosts — a home server, FreedomBox or VPS behind a reverse proxy / Cloudflare tunnel. Mobile apps (e.g. the OmniChat Android app) can only reach *remote* MCP servers, so this is the mode to use from a phone.
 
 ```bash
 npm run start:http          # listens on 127.0.0.1:8003, endpoint /mcp (+ /health)
@@ -220,19 +218,6 @@ On **Windows**, run it in a console (`npm run start:http`) or register a schedul
 | `dsw21-mcp.devhorizon.online` | `http://localhost:8003` |
 
 The MCP endpoint then is `https://dsw21-mcp.devhorizon.online/mcp`. Reverse-proxy notes: pass the `Mcp-Session-Id` header and `POST`/`DELETE` methods through, disable response buffering for `text/event-stream` (nginx: `proxy_buffering off; proxy_read_timeout 110s`), and mind Cloudflare's free-tier 100 s idle timeout — build the GTFS index once after every (re)start so the first real call stays fast.
-
-## 1.5 Location sharing (`/locate` page)
-
-The location tools (`current_location`, `nearby_stops`, `plan_journey`) resolve the user's position from two sources, in this order:
-
-1. **GPS via the `/locate` page** (HTTP mode only). Open `https://<your-host>/locate` once in a phone browser, grant geolocation permission — the page sends the position to the server (`POST /locate`) and keeps it fresh via `watchPosition` while the tab stays open. Coordinates are stored **on your own server** in `GTFS_INDEX_DIR/location.json` (mode 600) and survive restarts.
-2. **`LOCATION_LAT` / `LOCATION_LON`** env vars — a static position for machines without a browser.
-
-There is deliberately **no IP geolocation**: its accuracy (~20 km, often worse) is useless for journey planning — routing from a wrong point is worse than asking the user to open `/locate`.
-
-> **Privacy & access**
-> * GPS coordinates never leave your server and are never sent to any third party.
-> * The `/locate` page has **no authentication** (as agreed): anyone who knows the URL can *read* nothing but can *overwrite* the stored position. If the hostname is secret and the rest of the deployment is protected (Cloudflare Access etc.), that is acceptable for personal use; do not publish the `/locate` URL.
 
 ---
 
@@ -437,9 +422,7 @@ The phone needs no local runtime — everything runs on the server. The first GT
 | `DB_LANG` | `en` | Default output language (`en`/`de`) when a call omits `language`. (Name kept for backward compatibility; no Deutsche Bahn involvement.) |
 | `DB_USER_AGENT` | *(unset)* | Optional User-Agent sent with requests to gtfs.de — a polite way to identify your deployment. |
 | `GTFS_RT_FEED_URL` | `https://realtime.gtfs.de/realtime-free.pb` | GTFS-RT stream used by all tools. |
-| `GTFS_INDEX_DIR` | `./.gtfs-index` | Cache directory for the static-GTFS index and the stored GPS position (`location.json`). |
-| `LOCATION_LAT` / `LOCATION_LON` | *(unset)* | Static fallback coordinates used by `current_location` / `nearby_stops` / `plan_journey` when no GPS fix has been shared. |
-| `LOCATION_FILE` | `<GTFS_INDEX_DIR>/location.json` | Where the GPS position from the `/locate` page is stored (mode 600). |
+| `GTFS_INDEX_DIR` | `./.gtfs-index` | Cache directory for the static-GTFS index. |
 | `TRANSITOUS_URL` | `https://api.transitous.org/api` | Base URL of the MOTIS instance used by `plan_journey` / `trip_status` / `stop_departures` (paths include the API version, e.g. `/v6/plan`). |
 | `MCP_HTTP_PORT` | `8003` | Listen port of the HTTP mode (`npm run start:http`; `0` = OS-assigned). |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Bind address of the HTTP mode. |
@@ -593,48 +576,7 @@ Free-text service alerts affecting DSW21 trips; generic attribution notices are 
 }
 ```
 
-### 4.4 `current_location` — where am I?
-
-**Last resort for clients without a location tool** — resolves the server-side position (precise GPS from `/locate` → static env vars). If the client can read GPS itself (e.g. zerotap), use **that** instead and pass the coordinates to `plan_journey`/`nearby_stops` directly. There is no IP geolocation — if no position is known, the tool says so and tells the user to open the `/locate` page.
-
-**Arguments**
-
-| Arg | Type | Default | Description |
-|---|---|---|---|
-| `language` | `"en"`/`"de"` | `DB_LANG` | Label language. |
-
-**Call**
-
-```json
-{"name": "current_location", "arguments": {}}
-```
-
-**Response with a GPS fix from the `/locate` page (real)**
-
-```json
-{
-  "latitude": 51.51693,
-  "longitude": 7.46115,
-  "source": "gps",
-  "accuracyMeters": 12,
-  "ageMinutes": 3
-}
-```
-
-Positions older than 6 h are flagged `"stale": true` with a note to re-open `/locate`. **Response when no location is known** (real):
-
-```json
-{
-  "location": null,
-  "note": "No location known yet. Open the /locate page of this server in a phone browser to share GPS coordinates (they stay on this server), or set LOCATION_LAT/LOCATION_LON on the server.",
-  "howTo": {
-    "gps": "POST /locate or open <this-server>/locate in a phone browser",
-    "env": "set LOCATION_LAT and LOCATION_LON on the server"
-  }
-}
-```
-
-### 4.5 `nearby_stops` — which stops are close?
+### 4.4 `nearby_stops` — which stops are close?
 
 Nearest stations from the static GTFS index, sorted by distance, deduplicated per station (platforms merged). Feed the `stopId` into `dsw21_delays` / `gtfs_rt_delays`.
 
@@ -670,7 +612,7 @@ Nearest stations from the static GTFS index, sorted by distance, deduplicated pe
 }
 ```
 
-### 4.6 `plan_journey` — how do I get there?
+### 4.5 `plan_journey` — how do I get there?
 
 Journey planning via Transitous (MOTIS, Germany-wide coverage) with realtime updates. The origin defaults to the current location — no need to ask the user where they are. The destination may be a place name (geocoded) or `"lat,lon"`.
 
@@ -726,7 +668,7 @@ Journey planning via Transitous (MOTIS, Germany-wide coverage) with realtime upd
 
 Transit legs carry `line`, `headsign`, `tripId`, `track`/`scheduledTrack`, `cancelled` and `delayMin` (realtime vs. schedule) — the same status words as the delay tools.
 
-### 4.7 `trip_status` — where is my vehicle and how late is it?
+### 4.6 `trip_status` — where is my vehicle and how late is it?
 
 One vehicle (train/bus/tram) along its **whole route anywhere in Germany**, with realtime: every stop with planned vs. expected times, delay propagation, platform changes, cancellations. Get the `tripId` from a `plan_journey` leg or a `stop_departures` entry.
 
@@ -774,7 +716,7 @@ One vehicle (train/bus/tram) along its **whole route anywhere in Germany**, with
 
 `delayedStops` answers "how far will the delay spread?" at a glance; per-stop `track`/`scheduledTrack` show platform changes.
 
-### 4.8 `stop_departures` — timetable for any stop in Germany
+### 4.7 `stop_departures` — timetable for any stop in Germany
 
 Next departures at **any stop in Germany** with realtime (Transitous/MOTIS) — complements `dsw21_delays`/`gtfs_rt_delays`, which only cover the gtfs.de feed region. Useful for long-distance stations (Köln, Frankfurt, München…) and for trips outside NRW.
 
@@ -829,7 +771,6 @@ Next departures at **any stop in Germany** with realtime (Transitous/MOTIS) — 
 | *"Is anything delayed at Dortmund Kreuzstraße?"* | `gtfs_rt_delays {"stop": "Dortmund Kreuzstraße", "minDelay": 1}` |
 | *"How do I get to the airport?"* | `plan_journey {"to": "Dortmund Flughafen"}` — origin = current location |
 | *"Which stop is near me?"* | `nearby_stops {}` → feed `stopId` into `dsw21_delays` |
-| *"Where am I?"* (only if the client has no location tool) | `current_location {}` |
 | *"The train to Köln leaves at 17:00 — plan so I arrive by then"* | `plan_journey {"to": "Köln Hbf", "time": "…T17:00:00+02:00", "arriveBy": true}` |
 | *"How late is my U41 and where will the delay hit?"* | `stop_departures {"stop": "Dortmund Hbf", "limit": 5}` → `trip_status {"tripId": "…"}` |
 | *"When does the next ICE leave for Frankfurt?"* | `stop_departures {"stop": "Frankfurt (M) Hbf", "modes": ["HIGHSPEED_RAIL"]}` or the same for the origin station |
@@ -843,8 +784,7 @@ Next departures at **any stop in Germany** with realtime (Transitous/MOTIS) — 
 * gtfs.de notes **buses in the VRR feed as incomplete**; tram/rail (DSW21 U- and tram lines) are the reliable part.
 * **HTTP mode has no built-in auth** — see the security box in section 1.4; always publish it behind access control.
 * The HTTP mode does not serve standalone SSE (`GET /mcp` answers `405`); supported clients use `POST` and are unaffected.
-* **No location → no automatic routing origin**: `plan_journey`/`nearby_stops` without explicit coordinates need a GPS fix from the `/locate` page (or env vars). IP geolocation is deliberately not used (~20 km accuracy is useless for routing).
-* The **`/locate` page is unauthenticated** — anyone knowing the URL can overwrite the stored position (section 1.5). It exposes nothing, but keep the URL private.
+* **No location → no automatic routing origin**: `plan_journey`/`nearby_stops` without explicit coordinates return an error. Pass coordinates from your location tool.
 * **Journeys, trips and timetables come from Transitous** (free community service, Germany-wide GTFS/GTFS-RT aggregation, MOTIS v6 API) — respect its [usage policy](https://transitous.org/api/); this server caches itineraries for 10 minutes and realtime boards for 30 s. Coverage follows the transit feeds, so a few regional operators may be missing.
 
 # 7. Troubleshooting
@@ -861,9 +801,7 @@ Next departures at **any stop in Germany** with realtime (Transitous/MOTIS) — 
 | HTTP: connection drops after ~60–100 s | Cloudflare free tier cuts idle connections at 100 s. Pre-warm the GTFS index after each restart (one tool call) and/or enable keep-alive pings in the client. |
 | HTTP: `405 Method Not Allowed` on `GET /mcp` | Normal — standalone SSE is not supported; clients use `POST`. |
 | HTTP: `connection refused` | Server not running, or wrong `MCP_HTTP_HOST`/`MCP_HTTP_PORT`. Check `curl http://127.0.0.1:8003/health` → `ok`. |
-| `current_location` says the location is unknown | No GPS fix yet — open `https://<host>/locate` in a phone browser and keep the tab open, or set `LOCATION_LAT`/`LOCATION_LON`. IP geolocation is intentionally not used. |
-| `current_location` says `"stale": true` | The GPS position is older than 6 h — re-open the `/locate` page. |
-| `plan_journey`/`stop_departures`: `Place "…" not found` | The geocoder did not recognize the name — use a more specific name or `"lat,lon"`. |
+| `plan_journey`/`stop_departures`: `Place "…" not found` | The geocoder did not recognize the name - use a more specific name or `"lat,lon"`. |
 | `plan_journey`: `MOTIS … 403 Generic user-agent` | Transitous rejects generic User-Agents — set `DB_USER_AGENT` on the server (this build already sends a default one; a custom UA is politer). |
 | `trip_status`: `Trip "…" not found` | The trip has already finished or the ID is stale — fetch a fresh `tripId` from `stop_departures` or a `plan_journey` leg. |
 | `nearby_stops` returns 0 stops | Radius too small or the position is in the middle of nowhere — increase `radius` (max 5000 m). |
@@ -884,11 +822,11 @@ Layout:
 dsw21-mcp/
 ├── src/
 │   ├── index.js          # entry: stdio transport + tool registration
-│   ├── http.js           # entry: Streamable HTTP transport (/mcp, /health, /locate)
+│   ├── http.js           # entry: Streamable HTTP transport (/mcp, /health)
 │   ├── server.js         # shared McpServer factory used by both entries
 │   ├── cache.js          # in-memory TTL cache
 │   ├── i18n.js           # en/de strings + language resolution
-│   ├── location.js       # user location: /locate page + GPS file store (no IP geolocation)
+│   ├── time.js           # ISO 8601 formatter with explicit Europe/Berlin offset
 │   ├── nearby.js         # haversine distance + nearest-stop search (pure logic)
 │   ├── gtfs/
 │   │   ├── zip.js        # read single files out of a remote 236 MB zip via HTTP Range
@@ -897,8 +835,8 @@ dsw21-mcp/
 │   │   └── feed.js       # GTFS-RT feed: fetch, decode, join
 │   └── tools/
 │       ├── gtfs-rt.js    # dsw21_delays, gtfs_rt_delays, gtfs_rt_alerts
-│       ├── location.js   # current_location, nearby_stops
-│       └── journey.js    # plan_journey (Transitous/MOTIS)
+│       ├── location.js   # nearby_stops (coordinates come from the client)
+│       └── journey.js    # plan_journey, trip_status, stop_departures
 └── test/
     ├── gtfs.test.js      # offline CSV + stop-resolution + nearest-stops tests
     ├── gtfsrt-live.js    # live GTFS-RT pipeline test
